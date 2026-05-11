@@ -19,15 +19,22 @@ const PROJECT_STATUS = {
   cancelado: { label: "Cancelado",    badge: "gray"  },
 }
 const PIPELINE_STAGE = {
-  lead:      { label: "Lead",       color: "#60a5fa", order: 0 },
-  contato:   { label: "Contactado", color: "#a78bfa", order: 1 },
-  proposta:  { label: "Proposta",   color: "#f59e0b", order: 2 },
-  negoc:     { label: "Negociação", color: "#ec4899", order: 3 },
-  fechado:   { label: "Fechado ✓",  color: "#22c97d", order: 4 },
+  lead:      { label: "Lead",         color: "#60a5fa", order: 0 },
+  contato:   { label: "Contactado",   color: "#a78bfa", order: 1 },
+  proposta:  { label: "Proposta",     color: "#f59e0b", order: 2 },
+  negoc:     { label: "Negociação",   color: "#ec4899", order: 3 },
+  fechado:   { label: "Fechado ✓",    color: "#22c97d", order: 4 },
 }
 const PIPELINE_STAGE_KEYS = ["lead","contato","proposta","negoc","fechado"]
 
-// Transições permitidas no pipeline (evita drops inválidos)
+// Progresso automático por status do projeto
+const PROGRESS_BY_STATUS = {
+  andamento: 45,
+  concluido: 100,
+  cancelado: 0,
+}
+
+// Transições permitidas no pipeline
 const ALLOWED_TRANSITIONS = {
   lead:     ["contato"],
   contato:  ["lead","proposta"],
@@ -37,55 +44,64 @@ const ALLOWED_TRANSITIONS = {
 }
 
 // ═══════════════════════════════════════════════════════════════════
-// 2. DADOS INICIAIS — todos com IDs, valores numéricos e ISO dates
+// 2. DADOS INICIAIS — clientes com projetos integrados e IDs únicos
 // ═══════════════════════════════════════════════════════════════════
 const SEED_CLIENTS = [
-  { id:"cl_001", name:"Marina Alves",    email:"marina@digitalstudio.com",   phone:"(11) 98765-4321", company:"Digital Studio",  projectValue:8500,  paymentStatus:"pago",     projectStatus:"concluido", startDate:"2024-02-01", endDate:"2024-04-30", notes:"Redesign site institucional." },
-  { id:"cl_002", name:"Carlos Mendonça", email:"carlos@techsolutions.com",   phone:"(11) 91234-5678", company:"Tech Solutions",  projectValue:14200, paymentStatus:"pendente",  projectStatus:"andamento", startDate:"2024-03-15", endDate:"2024-07-15", notes:"Sistema de gestão interno." },
-  { id:"cl_003", name:"Beatriz Costa",   email:"bia@modaverde.com.br",       phone:"(21) 97654-3210", company:"Moda Verde",      projectValue:5800,  paymentStatus:"atrasado",  projectStatus:"andamento", startDate:"2024-01-10", endDate:"2024-03-10", notes:"E-commerce sustentável." },
-  { id:"cl_004", name:"Rafael Torres",   email:"rafael@grupoalpha.com",      phone:"(51) 99876-5432", company:"Grupo Alpha",     projectValue:22000, paymentStatus:"pago",     projectStatus:"concluido", startDate:"2023-11-01", endDate:"2024-02-28", notes:"Plataforma SaaS." },
-  { id:"cl_005", name:"Juliana Neves",   email:"ju@inovacaolab.io",          phone:"(41) 98123-7654", company:"Inovação Lab",    projectValue:9300,  paymentStatus:"pendente",  projectStatus:"cancelado", startDate:"2024-04-01", endDate:"2024-06-01", notes:"App mobile. Cancelado." },
+  {
+    id:"CLI-1746983720001", name:"Marina Alves",    email:"marina@digitalstudio.com",   phone:"(11) 98765-4321", company:"Digital Studio",
+    projectName:"Dashboard Analytics",  projectOwner:"Carlos M.",  projectStatus:"concluido", projectProgress:100,
+    paymentStatus:"pago",     projectValue:8500,  startDate:"2024-02-01", endDate:"2024-04-30", notes:"Redesign site institucional.",
+  },
+  {
+    id:"CLI-1746983720002", name:"Carlos Mendonça", email:"carlos@techsolutions.com",   phone:"(11) 91234-5678", company:"Tech Solutions",
+    projectName:"Integração CRM",       projectOwner:"Carlos M.",  projectStatus:"andamento", projectProgress:88,
+    paymentStatus:"pendente",  projectValue:14200, startDate:"2024-03-15", endDate:"2024-07-15", notes:"Sistema de gestão interno.",
+  },
+  {
+    id:"CLI-1746983720003", name:"Beatriz Costa",   email:"bia@modaverde.com.br",       phone:"(21) 97654-3210", company:"Moda Verde",
+    projectName:"E-commerce B2B",       projectOwner:"Rafael P.",  projectStatus:"andamento", projectProgress:45,
+    paymentStatus:"atrasado",  projectValue:5800,  startDate:"2024-01-10", endDate:"2024-03-10", notes:"E-commerce sustentável.",
+  },
+  {
+    id:"CLI-1746983720004", name:"Rafael Torres",   email:"rafael@grupoalpha.com",      phone:"(51) 99876-5432", company:"Grupo Alpha",
+    projectName:"Redesign Portal v2",   projectOwner:"Mariana A.", projectStatus:"andamento", projectProgress:65,
+    paymentStatus:"pago",     projectValue:22000, startDate:"2023-11-01", endDate:"2024-02-28", notes:"Plataforma SaaS.",
+  },
+  {
+    id:"CLI-1746983720005", name:"Juliana Neves",   email:"ju@inovacaolab.io",          phone:"(41) 98123-7654", company:"Inovação Lab",
+    projectName:"App Mobile",           projectOwner:"Rafael P.",  projectStatus:"cancelado", projectProgress:0,
+    paymentStatus:"pendente",  projectValue:9300,  startDate:"2024-04-01", endDate:"2024-06-01", notes:"App mobile. Cancelado.",
+  },
 ]
 
 const SEED_DEALS = [
-  { id:"deal_001", clientId:"cl_003", name:"Beatriz Costa",   company:"Moda Verde",     value:5800,  stage:"lead",     closedAt:null,        createdAt:"2024-05-12" },
-  { id:"deal_002", clientId:null,     name:"Tech Holding",    company:"Tech Holding",   value:15000, stage:"lead",     closedAt:null,        createdAt:"2024-05-15" },
-  { id:"deal_003", clientId:null,     name:"Grupo Omega",     company:"Grupo Omega",    value:22000, stage:"contato",  closedAt:null,        createdAt:"2024-05-10" },
-  { id:"deal_004", clientId:null,     name:"Startup Beta",    company:"Startup Beta",   value:6200,  stage:"contato",  closedAt:null,        createdAt:"2024-05-11" },
-  { id:"deal_005", clientId:"cl_002", name:"Carlos Mendonça", company:"Tech Solutions", value:14200, stage:"proposta", closedAt:null,        createdAt:"2024-05-08" },
-  { id:"deal_006", clientId:"cl_005", name:"Juliana Neves",   company:"Inovação Lab",   value:9300,  stage:"negoc",    closedAt:null,        createdAt:"2024-05-07" },
-  { id:"deal_007", clientId:"cl_001", name:"Marina Alves",    company:"Digital Studio", value:8500,  stage:"fechado",  closedAt:"2024-05-06", createdAt:"2024-04-01" },
-  { id:"deal_008", clientId:"cl_004", name:"Rafael Torres",   company:"Grupo Alpha",    value:22000, stage:"fechado",  closedAt:"2024-05-05", createdAt:"2024-03-01" },
-]
-
-const SEED_PROJECTS = [
-  { id:"proj_001", clientId:"cl_004", name:"Redesign Portal v2",    client:"Grupo Alpha",    status:"andamento", deadline:"2026-06-30", owner:"Mariana A.", progress:65  },
-  { id:"proj_002", clientId:"cl_002", name:"Integração CRM",        client:"Tech Solutions", status:"andamento", deadline:"2026-06-15", owner:"Carlos M.",  progress:88  },
-  { id:"proj_003", clientId:"cl_005", name:"App Mobile",            client:"Inovação Lab",   status:"cancelado", deadline:"2026-08-30", owner:"Rafael P.",  progress:20  },
-  { id:"proj_004", clientId:null,     name:"Automação Marketing",   client:"Grupo Beta",     status:"andamento", deadline:"2026-07-20", owner:"Mariana A.", progress:45  },
-  { id:"proj_005", clientId:"cl_001", name:"Dashboard Analytics",   client:"Digital Studio", status:"concluido", deadline:"2026-05-01", owner:"Carlos M.",  progress:100 },
-  { id:"proj_006", clientId:null,     name:"API REST v3",           client:"Cloud Corp",     status:"andamento", deadline:"2026-07-10", owner:"Admin",      progress:55  },
-  { id:"proj_007", clientId:"cl_003", name:"E-commerce B2B",        client:"Moda Verde",     status:"cancelado", deadline:null,         owner:"Rafael P.",  progress:30  },
+  { id:"deal_001", clientId:"CLI-1746983720003", name:"Beatriz Costa",   company:"Moda Verde",     value:5800,  stage:"lead",     closedAt:null,        createdAt:"2024-05-12" },
+  { id:"deal_002", clientId:null,                name:"Tech Holding",    company:"Tech Holding",   value:15000, stage:"lead",     closedAt:null,        createdAt:"2024-05-15" },
+  { id:"deal_003", clientId:null,                name:"Grupo Omega",     company:"Grupo Omega",    value:22000, stage:"contato",  closedAt:null,        createdAt:"2024-05-10" },
+  { id:"deal_004", clientId:null,                name:"Startup Beta",    company:"Startup Beta",   value:6200,  stage:"contato",  closedAt:null,        createdAt:"2024-05-11" },
+  { id:"deal_005", clientId:"CLI-1746983720002", name:"Carlos Mendonça", company:"Tech Solutions", value:14200, stage:"proposta", closedAt:null,        createdAt:"2024-05-08" },
+  { id:"deal_006", clientId:"CLI-1746983720005", name:"Juliana Neves",   company:"Inovação Lab",   value:9300,  stage:"negoc",    closedAt:null,        createdAt:"2024-05-07" },
+  { id:"deal_007", clientId:"CLI-1746983720001", name:"Marina Alves",    company:"Digital Studio", value:8500,  stage:"fechado",  closedAt:"2024-05-06", createdAt:"2024-04-01" },
+  { id:"deal_008", clientId:"CLI-1746983720004", name:"Rafael Torres",   company:"Grupo Alpha",    value:22000, stage:"fechado",  closedAt:"2024-05-05", createdAt:"2024-03-01" },
 ]
 
 const SEED_TASKS = [
-  { id:"task_001", text:"Ligar para Grupo Alpha sobre renovação",     priority:"alta",  done:false, clientId:"cl_004", client:"Grupo Alpha"    },
-  { id:"task_002", text:"Enviar proposta atualizada — Tech Solutions", priority:"alta",  done:false, clientId:"cl_002", client:"Tech Solutions" },
-  { id:"task_003", text:"Preparar demo para Beatriz Costa",           priority:"media", done:false, clientId:"cl_003", client:"Moda Verde"     },
-  { id:"task_004", text:"Follow-up com Inovação Lab sobre pagamento", priority:"alta",  done:false, clientId:"cl_005", client:"Inovação Lab"   },
-  { id:"task_005", text:"Atualizar pipeline Q2",                      priority:"baixa", done:true,  clientId:null,     client:"Interno"        },
-  { id:"task_006", text:"Reunião de alinhamento com equipe",          priority:"media", done:true,  clientId:null,     client:"Interno"        },
-  { id:"task_007", text:"Configurar webhook de notificações",         priority:"baixa", done:true,  clientId:null,     client:"Interno"        },
+  { id:"task_001", text:"Ligar para Grupo Alpha sobre renovação",      priority:"alta",  done:false, clientId:"CLI-1746983720004", client:"Grupo Alpha"    },
+  { id:"task_002", text:"Enviar proposta atualizada — Tech Solutions", priority:"alta",  done:false, clientId:"CLI-1746983720002", client:"Tech Solutions" },
+  { id:"task_003", text:"Preparar demo para Beatriz Costa",            priority:"media", done:false, clientId:"CLI-1746983720003", client:"Moda Verde"     },
+  { id:"task_004", text:"Follow-up com Inovação Lab sobre pagamento",  priority:"alta",  done:false, clientId:"CLI-1746983720005", client:"Inovação Lab"   },
+  { id:"task_005", text:"Atualizar pipeline Q2",                       priority:"baixa", done:true,  clientId:null,               client:"Interno"        },
+  { id:"task_006", text:"Reunião de alinhamento com equipe",           priority:"media", done:true,  clientId:null,               client:"Interno"        },
+  { id:"task_007", text:"Configurar webhook de notificações",          priority:"baixa", done:true,  clientId:null,               client:"Interno"        },
 ]
 
 // ═══════════════════════════════════════════════════════════════════
 // 3. PERSISTÊNCIA — localStorage com schema versionado
 // ═══════════════════════════════════════════════════════════════════
 const STORAGE_KEYS = {
-  clients:  "dcl_v2_clients",
-  deals:    "dcl_v2_deals",
-  projects: "dcl_v2_projects",
-  tasks:    "dcl_v2_tasks",
+  clients: "dcl_v3_clients",
+  deals:   "dcl_v3_deals",
+  tasks:   "dcl_v3_tasks",
 }
 
 function loadOrSeed(key, seed) {
@@ -101,13 +117,9 @@ function persist(key, data) {
 // ═══════════════════════════════════════════════════════════════════
 // 4. HELPERS
 // ═══════════════════════════════════════════════════════════════════
-function uid() { return crypto.randomUUID() }
-
-/** Remove acentos e normaliza para busca */
 function normalize(str = "") {
   return str.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase().trim()
 }
-
 function formatCurrency(value) {
   return new Intl.NumberFormat("pt-BR", { style:"currency", currency:"BRL" }).format(Number(value) || 0)
 }
@@ -119,7 +131,6 @@ function formatDate(iso) {
 function initials(name = "") {
   return name.trim().split(" ").map(w => w[0]).slice(0,2).join("").toUpperCase()
 }
-
 const AVATAR_PALETTE = [
   { bg:"rgba(79,110,247,.15)",  fg:"#4f6ef7" },
   { bg:"rgba(167,139,250,.15)", fg:"#a78bfa" },
@@ -132,20 +143,27 @@ function avatarColor(name = "") {
   return AVATAR_PALETTE[idx]
 }
 
+// Cor da barra de progresso conforme status
+function progressBarColor(status) {
+  if (status === "concluido") return "#22c97d"
+  if (status === "cancelado") return "#ef4444"
+  return "#4f6ef7"
+}
+
 // ═══════════════════════════════════════════════════════════════════
 // 5. NAV & PAGE META
 // ═══════════════════════════════════════════════════════════════════
 const NAV_SECTIONS = [
   { label:"Principal", items:[
-    { id:"dashboard",     label:"Dashboard",    icon:"M3 3h7v7H3zM14 3h7v7h-7zM14 14h7v7h-7zM3 14h7v7H3z" },
-    { id:"pipeline",      label:"Pipeline CRM", icon:"M4 6h16M4 12h16M4 18h16", badgeKey:"deals"    },
-    { id:"clients",       label:"Clientes",     icon:"M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2M9 11a4 4 0 1 0 0-8 4 4 0 0 0 0 8zM23 21v-2a4 4 0 0 0-3-3.87M16 3.13a4 4 0 0 1 0 7.75", badgeKey:"clients" },
-    { id:"projects",      label:"Projetos",     icon:"M3 3h18v4H3zM3 10h18v4H3zM3 17h18v4H3z",          badgeKey:"projects" },
-    { id:"tasks",         label:"Tarefas",      icon:"M9 11l3 3L22 4M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11",   badgeKey:"pendingTasks" },
+    { id:"dashboard", label:"Dashboard",    icon:"M3 3h7v7H3zM14 3h7v7h-7zM14 14h7v7h-7zM3 14h7v7H3z" },
+    { id:"pipeline",  label:"Pipeline CRM", icon:"M4 6h16M4 12h16M4 18h16", badgeKey:"deals"       },
+    { id:"clients",   label:"Clientes",     icon:"M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2M9 11a4 4 0 1 0 0-8 4 4 0 0 0 0 8zM23 21v-2a4 4 0 0 0-3-3.87M16 3.13a4 4 0 0 1 0 7.75", badgeKey:"clients" },
+    { id:"projects",  label:"Projetos",     icon:"M3 3h18v4H3zM3 10h18v4H3zM3 17h18v4H3z", badgeKey:"projects" },
+    { id:"tasks",     label:"Tarefas",      icon:"M9 11l3 3L22 4M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11", badgeKey:"pendingTasks" },
   ]},
   { label:"Financeiro", items:[
-    { id:"finance",  label:"Financeiro",  icon:"M12 2a10 10 0 1 0 0 20A10 10 0 0 0 12 2zM12 6v6l4 2" },
-    { id:"reports",  label:"Relatórios",  icon:"M18 20V10M12 20V4M6 20v-6" },
+    { id:"finance",  label:"Financeiro", icon:"M12 2a10 10 0 1 0 0 20A10 10 0 0 0 12 2zM12 6v6l4 2" },
+    { id:"reports",  label:"Relatórios", icon:"M18 20V10M12 20V4M6 20v-6" },
   ]},
   { label:"Sistema", items:[
     { id:"notifications", label:"Notificações",  icon:"M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9M13.73 21a2 2 0 0 1-3.46 0" },
@@ -153,19 +171,19 @@ const NAV_SECTIONS = [
   ]},
 ]
 const PAGE_META = {
-  dashboard:     { title:"Dashboard",       sub:"Visão geral do sistema"   },
-  pipeline:      { title:"Pipeline CRM",    sub:"Kanban de oportunidades"  },
-  clients:       { title:"Clientes",        sub:"Base de contatos e contas"},
-  projects:      { title:"Projetos",        sub:"Gestão de projetos ativos"},
+  dashboard:     { title:"Dashboard",       sub:"Visão geral do sistema"    },
+  pipeline:      { title:"Pipeline CRM",    sub:"Kanban de oportunidades"   },
+  clients:       { title:"Clientes",        sub:"Base de contatos e contas" },
+  projects:      { title:"Projetos",        sub:"Gestão de projetos ativos" },
   tasks:         { title:"Tarefas",         sub:"Gerenciamento de atividades"},
-  finance:       { title:"Financeiro",      sub:"Receitas e pagamentos"    },
-  reports:       { title:"Relatórios",      sub:"Análises e métricas"      },
-  notifications: { title:"Notificações",    sub:"Central de alertas"       },
-  settings:      { title:"Configurações",   sub:"Preferências do sistema"  },
+  finance:       { title:"Financeiro",      sub:"Receitas e pagamentos"     },
+  reports:       { title:"Relatórios",      sub:"Análises e métricas"       },
+  notifications: { title:"Notificações",    sub:"Central de alertas"        },
+  settings:      { title:"Configurações",   sub:"Preferências do sistema"   },
 }
 
 // ═══════════════════════════════════════════════════════════════════
-// 6. UI PRIMITIVES (Badge, Icon, StatCard, Card, SectionLabel)
+// 6. UI PRIMITIVES
 // ═══════════════════════════════════════════════════════════════════
 const BADGE_COLOR = {
   green:  { bg:"rgba(34,201,125,.12)",  color:"#22c97d" },
@@ -251,14 +269,12 @@ function SectionLabel({ children }) {
 
 // ── Dashboard ──────────────────────────────────────────────────────
 function DashboardView({ clients, deals }) {
-  // Cálculos dinâmicos reais — sem hardcode
   const activeClients  = clients.filter(c => c.projectStatus === "andamento").length
   const totalRevenue   = clients.reduce((s,c) => s + (c.paymentStatus === "pago" ? c.projectValue : 0), 0)
   const openDeals      = deals.filter(d => d.stage !== "fechado").length
   const wonDeals       = deals.filter(d => d.stage === "fechado")
   const convRate       = deals.length > 0 ? Math.round((wonDeals.length / deals.length) * 100) : 0
 
-  // Pipeline por stage para mini-chart
   const stageCounts = PIPELINE_STAGE_KEYS.map(k => ({
     n: PIPELINE_STAGE[k].label,
     c: deals.filter(d => d.stage === k).length,
@@ -266,7 +282,6 @@ function DashboardView({ clients, deals }) {
   }))
   const maxStageCount = Math.max(...stageCounts.map(s => s.c), 1)
 
-  // Revenue bars (últimos 6 meses calculados de deals fechados)
   const REVENUE_DATA = [
     { month:"Dez", value:28 },{ month:"Jan", value:34 },
     { month:"Fev", value:31 },{ month:"Mar", value:42 },
@@ -286,11 +301,11 @@ function DashboardView({ clients, deals }) {
         <StatCard label="Receita recebida" value={formatCurrency(totalRevenue)}
           delta="pagamentos confirmados"
           iconPath="M12 2a10 10 0 1 0 0 20A10 10 0 0 0 12 2zM12 6v6l4 2" iconColor="green"/>
-        <StatCard label="Deals em aberto" value={openDeals}
-          delta={`${wonDeals.length} fechados`}
+        <StatCard label="Negociações em aberto" value={openDeals}
+          delta={`${wonDeals.length} fechadas`}
           iconPath="M4 6h16M4 12h16M4 18h16" iconColor="amber"/>
         <StatCard label="Taxa de conversão" value={`${convRate}%`}
-          delta="deals ganhos / total"
+          delta="negociações ganhas / total"
           iconPath="M18 20V10M12 20V4M6 20v-6" iconColor="purple"/>
       </div>
 
@@ -307,7 +322,7 @@ function DashboardView({ clients, deals }) {
             ))}
           </div>
         </Card>
-        <Card title="Pipeline por etapa" sub="Deals ativos">
+        <Card title="Pipeline por etapa" sub="Negociações ativas">
           {stageCounts.map((s,i) => (
             <div key={i} style={{ display:"flex", alignItems:"center", gap:8, marginBottom:8 }}>
               <div style={{ fontSize:10, color:"#8892a4", width:76, fontFamily:"monospace", whiteSpace:"nowrap", overflow:"hidden", textOverflow:"ellipsis" }}>{s.n}</div>
@@ -347,10 +362,10 @@ function DashboardView({ clients, deals }) {
             })
           }
         </Card>
-        <Card title="Top deals por valor">
+        <Card title="Top negociações por valor">
           <table style={{ width:"100%", borderCollapse:"collapse" }}>
             <thead><tr>
-              {["Deal","Etapa","Valor"].map(h => (
+              {["Negociação","Etapa","Valor"].map(h => (
                 <th key={h} style={{ textAlign:h==="Valor"?"right":"left", padding:"6px 0",
                   fontSize:9, color:"#5a6478", fontFamily:"monospace", textTransform:"uppercase",
                   letterSpacing:".5px", borderBottom:"1px solid rgba(255,255,255,.05)" }}>{h}</th>
@@ -384,23 +399,19 @@ function PipelineView({ deals, setDeals, addToast }) {
   const [draggingId, setDraggingId] = useState(null)
   const [overStage, setOverStage]   = useState(null)
 
-  const totalValue    = deals.reduce((s,d) => s + d.value, 0)
-  const openDeals     = deals.filter(d => d.stage !== "fechado")
-  const avgTicket     = openDeals.length > 0
+  const totalValue  = deals.reduce((s,d) => s + d.value, 0)
+  const openDeals   = deals.filter(d => d.stage !== "fechado")
+  const avgTicket   = openDeals.length > 0
     ? openDeals.reduce((s,d) => s + d.value, 0) / openDeals.length : 0
 
   function onDragStart(id) { setDraggingId(id) }
-  function onDragOver(e, stageKey) {
-    e.preventDefault()
-    setOverStage(stageKey)
-  }
+  function onDragOver(e, stageKey) { e.preventDefault(); setOverStage(stageKey) }
   function onDrop(targetStage) {
     setOverStage(null)
     if (!draggingId) return
     const deal = deals.find(d => d.id === draggingId)
     if (!deal || deal.stage === targetStage) { setDraggingId(null); return }
 
-    // Validação de transição
     const allowed = ALLOWED_TRANSITIONS[deal.stage] ?? []
     if (!allowed.includes(targetStage)) {
       addToast(`Transição "${PIPELINE_STAGE[deal.stage].label}" → "${PIPELINE_STAGE[targetStage].label}" não permitida.`, "error")
@@ -415,7 +426,7 @@ function PipelineView({ deals, setDeals, addToast }) {
     )
     setDeals(updated)
     persist(STORAGE_KEYS.deals, updated)
-    addToast(`Deal movido para "${PIPELINE_STAGE[targetStage].label}"`, "success")
+    addToast(`Negociação movida para "${PIPELINE_STAGE[targetStage].label}"`, "success")
     setDraggingId(null)
   }
 
@@ -467,9 +478,9 @@ function PipelineView({ deals, setDeals, addToast }) {
         })}
       </div>
       <div style={{ display:"grid", gridTemplateColumns:"repeat(3,1fr)", gap:12 }}>
-        <StatCard label="Valor total pipeline" value={formatCurrency(totalValue)}/>
-        <StatCard label="Ticket médio"         value={formatCurrency(avgTicket)}/>
-        <StatCard label="Deals em aberto"      value={openDeals.length}/>
+        <StatCard label="Valor total pipeline"  value={formatCurrency(totalValue)}/>
+        <StatCard label="Ticket médio"           value={formatCurrency(avgTicket)}/>
+        <StatCard label="Negociações em aberto"  value={openDeals.length}/>
       </div>
     </div>
   )
@@ -491,12 +502,10 @@ function ClientsView({ clients, setClients, addToast }) {
   const filtered = useMemo(() => {
     const q = normalize(query)
     let result = clients.filter(c => {
-      // Busca com normalização de acentos
       if (q) {
-        const haystack = normalize(`${c.name} ${c.email} ${c.company||""}`)
+        const haystack = normalize(`${c.name} ${c.email} ${c.company||""} ${c.projectName||""} ${c.projectOwner||""} ${c.id||""}`)
         if (!haystack.includes(q)) return false
       }
-      // Filtro seguro com fallback "pendente"
       const ps  = c.paymentStatus || "pendente"
       const prs = c.projectStatus || "andamento"
       if (filterPayment !== "all" && ps  !== filterPayment) return false
@@ -504,7 +513,6 @@ function ClientsView({ clients, setClients, addToast }) {
       return true
     })
 
-    // Sort
     const [field, dir] = sortBy.split("_")
     result.sort((a, b) => {
       let va = a[field] ?? "", vb = b[field] ?? ""
@@ -519,13 +527,12 @@ function ClientsView({ clients, setClients, addToast }) {
 
   const hasFilters = query || filterPayment !== "all" || filterProject !== "all"
 
-  // Stats da view de clientes
-  const totalValue   = clients.reduce((s,c) => s + c.projectValue, 0)
-  const paidValue    = clients.filter(c => c.paymentStatus==="pago").reduce((s,c) => s + c.projectValue, 0)
-  const pendingValue = clients.filter(c => c.paymentStatus!=="pago").reduce((s,c) => s + c.projectValue, 0)
+  const totalValue   = useMemo(() => clients.reduce((s,c) => s + c.projectValue, 0), [clients])
+  const paidValue    = useMemo(() => clients.filter(c => c.paymentStatus==="pago").reduce((s,c) => s + c.projectValue, 0), [clients])
+  const pendingValue = useMemo(() => clients.filter(c => c.paymentStatus!=="pago").reduce((s,c) => s + c.projectValue, 0), [clients])
 
   function openCreate() {
-    setForm({ paymentStatus:"pendente", projectStatus:"andamento" })
+    setForm({ paymentStatus:"pendente", projectStatus:"andamento", projectProgress: PROGRESS_BY_STATUS["andamento"] })
     setFormErrors({})
     setEditingId(null)
     setShowForm(true)
@@ -540,16 +547,18 @@ function ClientsView({ clients, setClients, addToast }) {
 
   function validateForm(f) {
     const e = {}
-    if (!f.name?.trim())   e.name  = "Nome obrigatório"
-    if (!f.email?.trim())  e.email = "Email obrigatório"
+    if (!f.name?.trim())        e.name        = "Nome obrigatório"
+    if (!f.email?.trim())       e.email       = "Email obrigatório"
     else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(f.email)) e.email = "Email inválido"
-    if (!f.phone?.trim())  e.phone = "Telefone obrigatório"
+    if (!f.phone?.trim())       e.phone       = "Telefone obrigatório"
     if (!f.projectValue || Number(f.projectValue) <= 0) e.projectValue = "Valor deve ser > 0"
-    if (!f.paymentStatus) e.paymentStatus = "Selecione"
-    if (!f.projectStatus) e.projectStatus = "Selecione"
-    if (!f.startDate)     e.startDate = "Data obrigatória"
-    if (!f.endDate)       e.endDate   = "Data obrigatória"
+    if (!f.paymentStatus)       e.paymentStatus = "Selecione"
+    if (!f.projectStatus)       e.projectStatus = "Selecione"
+    if (!f.startDate)           e.startDate   = "Data obrigatória"
+    if (!f.endDate)             e.endDate     = "Data obrigatória"
     if (f.startDate && f.endDate && f.endDate < f.startDate) e.endDate = "Deve ser após o início"
+    if (!f.projectName?.trim()) e.projectName = "Nome do projeto obrigatório"
+    if (!f.projectOwner?.trim()) e.projectOwner = "Responsável obrigatório"
     return e
   }
 
@@ -559,13 +568,26 @@ function ClientsView({ clients, setClients, addToast }) {
     if (Object.keys(errs).length) { setFormErrors(errs); return }
     setSaving(true)
     await new Promise(r => setTimeout(r, 350))
+
+    const progress = Math.min(100, Math.max(0, Number(form.projectProgress) || 0))
+
     if (editingId) {
-      const updated = clients.map(c => c.id === editingId ? { ...c, ...form, projectValue: Number(form.projectValue) } : c)
+      const updated = clients.map(c =>
+        c.id === editingId
+          ? { ...c, ...form, projectValue: Number(form.projectValue), projectProgress: progress }
+          : c
+      )
       setClients(updated)
       persist(STORAGE_KEYS.clients, updated)
       addToast("Cliente atualizado!", "success")
     } else {
-      const newClient = { ...form, id: uid(), projectValue: Number(form.projectValue), createdAt: new Date().toISOString() }
+      const newClient = {
+        ...form,
+        id: `CLI-${Date.now()}`,
+        projectValue: Number(form.projectValue),
+        projectProgress: progress,
+        createdAt: new Date().toISOString(),
+      }
       const updated = [newClient, ...clients]
       setClients(updated)
       persist(STORAGE_KEYS.clients, updated)
@@ -583,7 +605,17 @@ function ClientsView({ clients, setClients, addToast }) {
     setConfirmId(null)
   }
 
-  function setF(k, v) { setForm(p => ({...p,[k]:v})); setFormErrors(p => ({...p,[k]:""})) }
+  function setF(k, v) {
+    setForm(p => {
+      const next = { ...p, [k]: v }
+      // Progresso automático ao mudar status — mas preserva edição manual
+      if (k === "projectStatus" && v in PROGRESS_BY_STATUS) {
+        next.projectProgress = PROGRESS_BY_STATUS[v]
+      }
+      return next
+    })
+    setFormErrors(p => ({ ...p, [k]:"" }))
+  }
 
   const inputStyle = {
     background:"#161b2a", border:"1px solid rgba(255,255,255,.15)", borderRadius:7,
@@ -620,7 +652,7 @@ function ClientsView({ clients, setClients, addToast }) {
           border:"1px solid rgba(255,255,255,.08)", borderRadius:7, padding:"6px 10px", flex:1, minWidth:200 }}>
           <Icon d="M21 21l-4.35-4.35M17 11A6 6 0 1 1 5 11a6 6 0 0 1 12 0z" size={13}/>
           <input value={query} onChange={e => setQuery(e.target.value)}
-            placeholder="Buscar por nome, email, empresa…"
+            placeholder="Buscar por nome, email, empresa, ID…"
             style={{ background:"none", border:"none", outline:"none", fontSize:12,
               color:"#e8eaf0", fontFamily:"inherit", width:"100%" }}/>
           {query && <button onClick={() => setQuery("")}
@@ -674,7 +706,7 @@ function ClientsView({ clients, setClients, addToast }) {
               exit={{ scale:.93, opacity:0 }} transition={{ duration:.18 }}
               onClick={e => e.stopPropagation()}
               style={{ background:"#111520", border:"1px solid rgba(255,255,255,.1)", borderRadius:16,
-                width:"100%", maxWidth:580, maxHeight:"90vh", overflowY:"auto",
+                width:"100%", maxWidth:600, maxHeight:"90vh", overflowY:"auto",
                 boxShadow:"0 20px 60px rgba(0,0,0,.5)" }}>
               <div style={{ padding:"20px 24px 0", display:"flex", alignItems:"center", justifyContent:"space-between" }}>
                 <div style={{ fontSize:16, fontWeight:600, color:"#e8eaf0" }}>
@@ -685,7 +717,17 @@ function ClientsView({ clients, setClients, addToast }) {
                   display:"flex", alignItems:"center", justifyContent:"center", fontSize:18 }}>×</button>
               </div>
               <form onSubmit={handleSave} noValidate style={{ padding:"20px 24px 24px" }}>
-                {/* Contato */}
+
+                {/* ID (somente edição) */}
+                {editingId && (
+                  <div style={{ marginBottom:14, padding:"8px 12px", background:"#161b2a",
+                    borderRadius:7, border:"1px solid rgba(255,255,255,.07)" }}>
+                    <span style={{ fontSize:9, color:"#5a6478", fontFamily:"monospace", textTransform:"uppercase", letterSpacing:".5px" }}>ID DO CLIENTE: </span>
+                    <span style={{ fontSize:11, color:"#5a6478", fontFamily:"monospace" }}>{editingId}</span>
+                  </div>
+                )}
+
+                {/* Dados do contato */}
                 <div style={{ fontSize:9, color:"#5a6478", textTransform:"uppercase", letterSpacing:".7px",
                   fontFamily:"monospace", marginBottom:10, paddingBottom:8, borderBottom:"1px solid rgba(255,255,255,.06)" }}>
                   Dados do contato
@@ -705,12 +747,25 @@ function ClientsView({ clients, setClients, addToast }) {
                     </div>
                   ))}
                 </div>
-                {/* Projeto */}
+
+                {/* Dados do projeto */}
                 <div style={{ fontSize:9, color:"#5a6478", textTransform:"uppercase", letterSpacing:".7px",
                   fontFamily:"monospace", marginBottom:10, paddingBottom:8, borderBottom:"1px solid rgba(255,255,255,.06)" }}>
                   Dados do projeto
                 </div>
                 <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:12, marginBottom:12 }}>
+                  <div>
+                    <div style={{ fontSize:9, color:"#5a6478", fontFamily:"monospace", textTransform:"uppercase", letterSpacing:".5px", marginBottom:5 }}>Nome do projeto *</div>
+                    <input type="text" value={form.projectName||""} onChange={e => setF("projectName", e.target.value)}
+                      placeholder="Ex: Redesign Site" style={{ ...inputStyle, borderColor: formErrors.projectName ? "#ef4444" : "rgba(255,255,255,.15)" }}/>
+                    {formErrors.projectName && <div style={{ fontSize:10, color:"#ef4444", marginTop:3 }}>{formErrors.projectName}</div>}
+                  </div>
+                  <div>
+                    <div style={{ fontSize:9, color:"#5a6478", fontFamily:"monospace", textTransform:"uppercase", letterSpacing:".5px", marginBottom:5 }}>Responsável *</div>
+                    <input type="text" value={form.projectOwner||""} onChange={e => setF("projectOwner", e.target.value)}
+                      placeholder="Ex: Mariana A." style={{ ...inputStyle, borderColor: formErrors.projectOwner ? "#ef4444" : "rgba(255,255,255,.15)" }}/>
+                    {formErrors.projectOwner && <div style={{ fontSize:10, color:"#ef4444", marginTop:3 }}>{formErrors.projectOwner}</div>}
+                  </div>
                   <div>
                     <div style={{ fontSize:9, color:"#5a6478", fontFamily:"monospace", textTransform:"uppercase", letterSpacing:".5px", marginBottom:5 }}>Valor (R$) *</div>
                     <input type="number" min="0" step="0.01" value={form.projectValue||""}
@@ -721,12 +776,36 @@ function ClientsView({ clients, setClients, addToast }) {
                   <div>
                     <div style={{ fontSize:9, color:"#5a6478", fontFamily:"monospace", textTransform:"uppercase", letterSpacing:".5px", marginBottom:5 }}>Status pagamento *</div>
                     <select value={form.paymentStatus||""} onChange={e => setF("paymentStatus", e.target.value)}
-                      style={{ ...inputStyle, borderColor: formErrors.paymentStatus ? "#ef4444" : "rgba(255,255,255,.15)",
-                        cursor:"pointer", appearance:"none" }}>
+                      style={{ ...inputStyle, borderColor: formErrors.paymentStatus ? "#ef4444" : "rgba(255,255,255,.15)", cursor:"pointer", appearance:"none" }}>
                       <option value="">Selecione…</option>
                       {Object.entries(PAYMENT_STATUS).map(([v,s]) => <option key={v} value={v}>{s.label}</option>)}
                     </select>
                     {formErrors.paymentStatus && <div style={{ fontSize:10, color:"#ef4444", marginTop:3 }}>{formErrors.paymentStatus}</div>}
+                  </div>
+                  <div>
+                    <div style={{ fontSize:9, color:"#5a6478", fontFamily:"monospace", textTransform:"uppercase", letterSpacing:".5px", marginBottom:5 }}>Status projeto *</div>
+                    <select value={form.projectStatus||""} onChange={e => setF("projectStatus", e.target.value)}
+                      style={{ ...inputStyle, borderColor: formErrors.projectStatus ? "#ef4444" : "rgba(255,255,255,.15)", cursor:"pointer", appearance:"none" }}>
+                      <option value="">Selecione…</option>
+                      {Object.entries(PROJECT_STATUS).map(([v,s]) => <option key={v} value={v}>{s.label}</option>)}
+                    </select>
+                    {formErrors.projectStatus && <div style={{ fontSize:10, color:"#ef4444", marginTop:3 }}>{formErrors.projectStatus}</div>}
+                  </div>
+                  <div>
+                    <div style={{ fontSize:9, color:"#5a6478", fontFamily:"monospace", textTransform:"uppercase", letterSpacing:".5px", marginBottom:5 }}>
+                      Progresso (%) <span style={{ color:"#3a4255" }}>— ajuste manual</span>
+                    </div>
+                    <input type="number" min="0" max="100" value={form.projectProgress ?? ""}
+                      onChange={e => setF("projectProgress", e.target.value)}
+                      placeholder="0–100"
+                      style={inputStyle}/>
+                    {form.projectProgress !== undefined && (
+                      <div style={{ marginTop:6, height:4, background:"#1c2236", borderRadius:4, overflow:"hidden" }}>
+                        <div style={{ height:"100%", borderRadius:4,
+                          width:`${Math.min(100,Math.max(0,Number(form.projectProgress)||0))}%`,
+                          background: progressBarColor(form.projectStatus) }}/>
+                      </div>
+                    )}
                   </div>
                   <div>
                     <div style={{ fontSize:9, color:"#5a6478", fontFamily:"monospace", textTransform:"uppercase", letterSpacing:".5px", marginBottom:5 }}>Data início *</div>
@@ -740,22 +819,13 @@ function ClientsView({ clients, setClients, addToast }) {
                       style={{ ...inputStyle, borderColor: formErrors.endDate ? "#ef4444" : "rgba(255,255,255,.15)", colorScheme:"dark" }}/>
                     {formErrors.endDate && <div style={{ fontSize:10, color:"#ef4444", marginTop:3 }}>{formErrors.endDate}</div>}
                   </div>
-                  <div>
-                    <div style={{ fontSize:9, color:"#5a6478", fontFamily:"monospace", textTransform:"uppercase", letterSpacing:".5px", marginBottom:5 }}>Status projeto *</div>
-                    <select value={form.projectStatus||""} onChange={e => setF("projectStatus", e.target.value)}
-                      style={{ ...inputStyle, borderColor: formErrors.projectStatus ? "#ef4444" : "rgba(255,255,255,.15)",
-                        cursor:"pointer", appearance:"none" }}>
-                      <option value="">Selecione…</option>
-                      {Object.entries(PROJECT_STATUS).map(([v,s]) => <option key={v} value={v}>{s.label}</option>)}
-                    </select>
-                    {formErrors.projectStatus && <div style={{ fontSize:10, color:"#ef4444", marginTop:3 }}>{formErrors.projectStatus}</div>}
-                  </div>
-                  <div>
+                  <div style={{ gridColumn:"1/-1" }}>
                     <div style={{ fontSize:9, color:"#5a6478", fontFamily:"monospace", textTransform:"uppercase", letterSpacing:".5px", marginBottom:5 }}>Observações</div>
                     <input type="text" value={form.notes||""} onChange={e => setF("notes", e.target.value)}
                       placeholder="Detalhes…" style={inputStyle}/>
                   </div>
                 </div>
+
                 <div style={{ display:"flex", gap:8, justifyContent:"flex-end",
                   paddingTop:16, borderTop:"1px solid rgba(255,255,255,.06)" }}>
                   <button type="button" onClick={closeForm} disabled={saving}
@@ -812,7 +882,7 @@ function ClientsView({ clients, setClients, addToast }) {
         <table style={{ width:"100%", borderCollapse:"collapse" }}>
           <thead>
             <tr>
-              {["Nome","Empresa","Email","Pagamento","Projeto","Valor","Entrega",""].map(h => (
+              {["ID","Nome","Empresa","Email","Pagamento","Projeto","Valor","Entrega",""].map(h => (
                 <th key={h} style={{ padding:"10px 14px", textAlign:"left", fontSize:9, fontWeight:600,
                   textTransform:"uppercase", letterSpacing:".8px", color:"#5a6478", fontFamily:"monospace",
                   borderBottom:"1px solid rgba(255,255,255,.05)" }}>{h}</th>
@@ -821,10 +891,10 @@ function ClientsView({ clients, setClients, addToast }) {
           </thead>
           <tbody>
             {filtered.length === 0
-              ? <tr><td colSpan={8} style={{ padding:"48px 0", textAlign:"center", color:"#5a6478", fontSize:13 }}>
+              ? <tr><td colSpan={9} style={{ padding:"48px 0", textAlign:"center", color:"#5a6478", fontSize:13 }}>
                   {hasFilters ? "Nenhum resultado para os filtros aplicados" : "Nenhum cliente ainda"}
                 </td></tr>
-              : filtered.map((c, i) => {
+              : filtered.map((c) => {
                 const pal = avatarColor(c.name)
                 const ps  = PAYMENT_STATUS[c.paymentStatus ?? "pendente"]
                 const prs = PROJECT_STATUS[c.projectStatus ?? "andamento"]
@@ -833,6 +903,12 @@ function ClientsView({ clients, setClients, addToast }) {
                     style={{ borderBottom:"1px solid rgba(255,255,255,.03)", transition:"background .12s" }}
                     onMouseEnter={e => e.currentTarget.style.background = "#161b2a"}
                     onMouseLeave={e => e.currentTarget.style.background = "transparent"}>
+                    {/* ID */}
+                    <td style={{ padding:"11px 14px" }}>
+                      <span style={{ fontSize:9, fontFamily:"monospace", color:"#5a6478", letterSpacing:".2px" }}>
+                        {c.id}
+                      </span>
+                    </td>
                     <td style={{ padding:"11px 14px" }}>
                       <div style={{ display:"flex", alignItems:"center", gap:8 }}>
                         <div style={{ width:28, height:28, borderRadius:7, background:pal.bg, color:pal.fg,
@@ -879,52 +955,132 @@ function ClientsView({ clients, setClients, addToast }) {
 }
 
 // ── Projects ───────────────────────────────────────────────────────
-function ProjectsView({ projects }) {
+// Consome clients — projetos são integrados aos clientes
+function ProjectsView({ clients }) {
+  const [filterStatus, setFilterStatus] = useState("all")
+  const [query, setQuery] = useState("")
+
+  const filtered = useMemo(() => {
+    const q = normalize(query)
+    return clients.filter(c => {
+      if (filterStatus !== "all" && (c.projectStatus || "andamento") !== filterStatus) return false
+      if (q) {
+        const haystack = normalize(`${c.projectName||""} ${c.name} ${c.projectOwner||""}`)
+        if (!haystack.includes(q)) return false
+      }
+      return true
+    })
+  }, [clients, filterStatus, query])
+
+  const chipStyle = active => ({
+    padding:"4px 10px", borderRadius:20, fontSize:11, cursor:"pointer", border:"1px solid",
+    fontFamily:"inherit", transition:"all .13s",
+    borderColor: active ? "#4f6ef7" : "rgba(255,255,255,.1)",
+    background:  active ? "#4f6ef7" : "transparent",
+    color:       active ? "#fff"    : "#8892a4",
+  })
+
+  // Stats de projetos
+  const activeCount    = useMemo(() => clients.filter(c => c.projectStatus === "andamento").length, [clients])
+  const completedCount = useMemo(() => clients.filter(c => c.projectStatus === "concluido").length, [clients])
+  const canceledCount  = useMemo(() => clients.filter(c => c.projectStatus === "cancelado").length, [clients])
+  const avgProgress    = useMemo(() => {
+    if (!clients.length) return 0
+    return Math.round(clients.reduce((s,c) => s + (c.projectProgress || 0), 0) / clients.length)
+  }, [clients])
+
   return (
-    <div style={{ background:"#111520", border:"1px solid rgba(255,255,255,.06)", borderRadius:12, overflow:"hidden" }}>
-      <table style={{ width:"100%", borderCollapse:"collapse" }}>
-        <thead><tr>
-          {["Projeto","Cliente","Status","Prazo","Responsável","Progresso"].map(h => (
-            <th key={h} style={{ padding:"10px 16px", textAlign:"left", fontSize:9, fontWeight:600,
-              textTransform:"uppercase", letterSpacing:".8px", color:"#5a6478", fontFamily:"monospace",
-              borderBottom:"1px solid rgba(255,255,255,.05)" }}>{h}</th>
-          ))}
-        </tr></thead>
-        <tbody>
-          {projects.map(p => {
-            const st = PROJECT_STATUS[p.status] ?? PROJECT_STATUS.andamento
-            return (
-              <tr key={p.id} style={{ borderBottom:"1px solid rgba(255,255,255,.03)" }}
-                onMouseEnter={e => e.currentTarget.style.background = "#161b2a"}
-                onMouseLeave={e => e.currentTarget.style.background = "transparent"}>
-                <td style={{ padding:"11px 16px", fontSize:12, fontWeight:500, color:"#e8eaf0" }}>{p.name}</td>
-                <td style={{ padding:"11px 16px", fontSize:12, color:"#8892a4" }}>{p.client}</td>
-                <td style={{ padding:"11px 16px" }}><Badge colorKey={st.badge} label={st.label}/></td>
-                <td style={{ padding:"11px 16px", fontSize:11, color:"#5a6478", fontFamily:"monospace" }}>
-                  {formatDate(p.deadline)}
-                </td>
-                <td style={{ padding:"11px 16px", fontSize:12, color:"#8892a4" }}>{p.owner}</td>
-                <td style={{ padding:"11px 16px" }}>
-                  <div style={{ display:"flex", alignItems:"center", gap:8 }}>
-                    <div style={{ width:80, background:"#1c2236", borderRadius:4, height:5, overflow:"hidden" }}>
-                      <div style={{ background: p.progress===100 ? "#22c97d" : "#4f6ef7",
-                        height:"100%", width:`${p.progress}%`, borderRadius:4 }}/>
-                    </div>
-                    <span style={{ fontSize:9, color:"#5a6478", fontFamily:"monospace" }}>{p.progress}%</span>
-                  </div>
-                </td>
-              </tr>
-            )
-          })}
-        </tbody>
-      </table>
+    <div>
+      {/* Stats */}
+      <div style={{ display:"grid", gridTemplateColumns:"repeat(4,1fr)", gap:12, marginBottom:20 }}>
+        <StatCard label="Em andamento" value={activeCount}    iconColor="blue"/>
+        <StatCard label="Concluídos"   value={completedCount} iconColor="green"/>
+        <StatCard label="Cancelados"   value={canceledCount}  iconColor="gray"/>
+        <StatCard label="Progresso médio" value={`${avgProgress}%`} iconColor="purple"/>
+      </div>
+
+      {/* Toolbar */}
+      <div style={{ display:"flex", gap:8, marginBottom:12, alignItems:"center", flexWrap:"wrap" }}>
+        <div style={{ display:"flex", alignItems:"center", gap:8, background:"#161b2a",
+          border:"1px solid rgba(255,255,255,.08)", borderRadius:7, padding:"6px 10px", flex:1, minWidth:180 }}>
+          <Icon d="M21 21l-4.35-4.35M17 11A6 6 0 1 1 5 11a6 6 0 0 1 12 0z" size={13}/>
+          <input value={query} onChange={e => setQuery(e.target.value)}
+            placeholder="Buscar projeto, cliente, responsável…"
+            style={{ background:"none", border:"none", outline:"none", fontSize:12,
+              color:"#e8eaf0", fontFamily:"inherit", width:"100%" }}/>
+          {query && <button onClick={() => setQuery("")}
+            style={{ background:"none", border:"none", cursor:"pointer", color:"#5a6478", fontSize:16, lineHeight:1 }}>×</button>}
+        </div>
+        <span style={{ fontSize:10, color:"#5a6478", fontFamily:"monospace" }}>STATUS:</span>
+        {[["all","Todos"],["andamento","Em andamento"],["concluido","Concluído"],["cancelado","Cancelado"]].map(([v,l]) => (
+          <button key={v} style={chipStyle(filterStatus===v)} onClick={() => setFilterStatus(v)}>{l}</button>
+        ))}
+      </div>
+
+      <div style={{ background:"#111520", border:"1px solid rgba(255,255,255,.06)", borderRadius:12, overflow:"hidden" }}>
+        <table style={{ width:"100%", borderCollapse:"collapse" }}>
+          <thead><tr>
+            {["Projeto","Cliente","Status","Prazo","Responsável","Progresso"].map(h => (
+              <th key={h} style={{ padding:"10px 16px", textAlign:"left", fontSize:9, fontWeight:600,
+                textTransform:"uppercase", letterSpacing:".8px", color:"#5a6478", fontFamily:"monospace",
+                borderBottom:"1px solid rgba(255,255,255,.05)" }}>{h}</th>
+            ))}
+          </tr></thead>
+          <tbody>
+            {filtered.length === 0
+              ? <tr><td colSpan={6} style={{ padding:"48px 0", textAlign:"center", color:"#5a6478", fontSize:13 }}>
+                  Nenhum projeto encontrado
+                </td></tr>
+              : filtered.map(c => {
+                const st       = PROJECT_STATUS[c.projectStatus ?? "andamento"]
+                const progress = c.projectProgress ?? PROGRESS_BY_STATUS[c.projectStatus ?? "andamento"] ?? 0
+                const barColor = progressBarColor(c.projectStatus)
+                return (
+                  <tr key={c.id} style={{ borderBottom:"1px solid rgba(255,255,255,.03)" }}
+                    onMouseEnter={e => e.currentTarget.style.background = "#161b2a"}
+                    onMouseLeave={e => e.currentTarget.style.background = "transparent"}>
+                    <td style={{ padding:"11px 16px", fontSize:12, fontWeight:500, color:"#e8eaf0" }}>
+                      {c.projectName || "—"}
+                    </td>
+                    <td style={{ padding:"11px 16px" }}>
+                      <div style={{ display:"flex", alignItems:"center", gap:7 }}>
+                        <div style={{ width:22, height:22, borderRadius:5, flexShrink:0,
+                          background:avatarColor(c.name).bg, color:avatarColor(c.name).fg,
+                          display:"flex", alignItems:"center", justifyContent:"center", fontSize:8, fontWeight:700 }}>
+                          {initials(c.name)}
+                        </div>
+                        <span style={{ fontSize:12, color:"#8892a4" }}>{c.name}</span>
+                      </div>
+                    </td>
+                    <td style={{ padding:"11px 16px" }}><Badge colorKey={st.badge} label={st.label}/></td>
+                    <td style={{ padding:"11px 16px", fontSize:11, color:"#5a6478", fontFamily:"monospace" }}>
+                      {formatDate(c.endDate)}
+                    </td>
+                    <td style={{ padding:"11px 16px", fontSize:12, color:"#8892a4" }}>
+                      {c.projectOwner || "—"}
+                    </td>
+                    <td style={{ padding:"11px 16px" }}>
+                      <div style={{ display:"flex", alignItems:"center", gap:8 }}>
+                        <div style={{ width:80, background:"#1c2236", borderRadius:4, height:5, overflow:"hidden" }}>
+                          <div style={{ background:barColor, height:"100%",
+                            width:`${progress}%`, borderRadius:4, transition:"width .4s" }}/>
+                        </div>
+                        <span style={{ fontSize:9, color:"#5a6478", fontFamily:"monospace" }}>{progress}%</span>
+                      </div>
+                    </td>
+                  </tr>
+                )
+              })
+            }
+          </tbody>
+        </table>
+      </div>
     </div>
   )
 }
 
 // ── Tasks ──────────────────────────────────────────────────────────
 function TasksView({ tasks, setTasks, addToast }) {
-  // Separar pending/done sem loops duplicados
   const pending = useMemo(() => tasks.filter(t => !t.done), [tasks])
   const done    = useMemo(() => tasks.filter(t =>  t.done), [tasks])
 
@@ -985,22 +1141,28 @@ function TasksView({ tasks, setTasks, addToast }) {
 
 // ── Finance ────────────────────────────────────────────────────────
 function FinanceView({ clients }) {
-  const paidValue    = clients.filter(c => c.paymentStatus==="pago").reduce((s,c) => s + c.projectValue, 0)
-  const pendingValue = clients.filter(c => c.paymentStatus==="pendente").reduce((s,c) => s + c.projectValue, 0)
-  const overdueValue = clients.filter(c => c.paymentStatus==="atrasado").reduce((s,c) => s + c.projectValue, 0)
+  const paidValue    = useMemo(() => clients.filter(c => c.paymentStatus==="pago").reduce((s,c) => s + c.projectValue, 0), [clients])
+  const pendingValue = useMemo(() => clients.filter(c => c.paymentStatus==="pendente").reduce((s,c) => s + c.projectValue, 0), [clients])
+  const overdueValue = useMemo(() => clients.filter(c => c.paymentStatus==="atrasado").reduce((s,c) => s + c.projectValue, 0), [clients])
   const totalValue   = paidValue + pendingValue + overdueValue
 
-  const recentPaid = [...clients]
-    .filter(c => c.paymentStatus === "pago")
-    .sort((a,b) => (b.endDate||"").localeCompare(a.endDate||""))
-    .slice(0,5)
+  const recentPaid = useMemo(() =>
+    [...clients]
+      .filter(c => c.paymentStatus === "pago")
+      .sort((a,b) => (b.endDate||"").localeCompare(a.endDate||""))
+      .slice(0,5),
+    [clients]
+  )
 
   return (
     <div>
       <div style={{ display:"grid", gridTemplateColumns:"repeat(3,1fr)", gap:12, marginBottom:20 }}>
-        <StatCard label="Receita recebida"  value={formatCurrency(paidValue)}    delta={`${Math.round(paidValue/totalValue*100)||0}% do total`}  iconColor="green"/>
-        <StatCard label="A receber"         value={formatCurrency(pendingValue)} delta={`${clients.filter(c=>c.paymentStatus==="pendente").length} pagamentos`} iconColor="amber"/>
-        <StatCard label="Em atraso"         value={formatCurrency(overdueValue)} delta={`${clients.filter(c=>c.paymentStatus==="atrasado").length} clientes`}   deltaType="down" iconColor="red"/>
+        <StatCard label="Receita recebida" value={formatCurrency(paidValue)}
+          delta={`${Math.round(paidValue/totalValue*100)||0}% do total`} iconColor="green"/>
+        <StatCard label="A receber" value={formatCurrency(pendingValue)}
+          delta={`${clients.filter(c=>c.paymentStatus==="pendente").length} pagamentos`} iconColor="amber"/>
+        <StatCard label="Em atraso" value={formatCurrency(overdueValue)}
+          delta={`${clients.filter(c=>c.paymentStatus==="atrasado").length} clientes`} deltaType="down" iconColor="red"/>
       </div>
       <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:12 }}>
         <Card title="Pagamentos confirmados">
@@ -1022,11 +1184,11 @@ function FinanceView({ clients }) {
         </Card>
         <Card title="Resumo geral">
           {[
-            { label:"Receita bruta",    value: formatCurrency(totalValue),   color:"#e8eaf0"           },
-            { label:"Recebido",         value: formatCurrency(paidValue),    color:"#22c97d"           },
-            { label:"Pendente",         value: formatCurrency(pendingValue), color:"#f59e0b"           },
-            { label:"Em atraso",        value: formatCurrency(overdueValue), color:"#ef4444"           },
-            { label:"Total de clientes",value: clients.length,               color:"#e8eaf0", bold:true },
+            { label:"Receita bruta",     value:formatCurrency(totalValue),   color:"#e8eaf0"           },
+            { label:"Recebido",          value:formatCurrency(paidValue),    color:"#22c97d"           },
+            { label:"Pendente",          value:formatCurrency(pendingValue), color:"#f59e0b"           },
+            { label:"Em atraso",         value:formatCurrency(overdueValue), color:"#ef4444"           },
+            { label:"Total de clientes", value:clients.length,               color:"#e8eaf0", bold:true },
           ].map((r,i) => (
             <div key={r.label} style={{ display:"flex", alignItems:"center", justifyContent:"space-between",
               padding:"9px 0", borderBottom: i<4 ? "1px solid rgba(255,255,255,.04)" : "none" }}>
@@ -1042,18 +1204,17 @@ function FinanceView({ clients }) {
 
 // ── Reports ────────────────────────────────────────────────────────
 function ReportsView({ clients, deals }) {
-  const wonDeals  = deals.filter(d => d.stage==="fechado")
+  const wonDeals  = useMemo(() => deals.filter(d => d.stage==="fechado"), [deals])
   const convRate  = deals.length > 0 ? Math.round((wonDeals.length/deals.length)*100) : 0
-  const totalRev  = clients.filter(c=>c.paymentStatus==="pago").reduce((s,c)=>s+c.projectValue,0)
   const avgTicket = wonDeals.length > 0 ? wonDeals.reduce((s,d)=>s+d.value,0)/wonDeals.length : 0
 
   return (
     <div>
       <div style={{ display:"grid", gridTemplateColumns:"repeat(4,1fr)", gap:12, marginBottom:20 }}>
-        <StatCard label="Total clientes"    value={clients.length}/>
-        <StatCard label="Deals fechados"    value={wonDeals.length}/>
-        <StatCard label="Taxa conversão"    value={`${convRate}%`}/>
-        <StatCard label="Ticket médio"      value={formatCurrency(avgTicket)}/>
+        <StatCard label="Total clientes"       value={clients.length}/>
+        <StatCard label="Negociações fechadas" value={wonDeals.length}/>
+        <StatCard label="Taxa conversão"       value={`${convRate}%`}/>
+        <StatCard label="Ticket médio"         value={formatCurrency(avgTicket)}/>
       </div>
       <Card title="Distribuição por status de pagamento">
         {Object.entries(PAYMENT_STATUS).map(([key, s]) => {
@@ -1078,14 +1239,14 @@ function ReportsView({ clients, deals }) {
   )
 }
 
-// ── Notifications / Settings mantidos do original ──────────────────
+// ── Notifications ──────────────────────────────────────────────────
 function NotificationsView() {
   const notifs = [
-    { icon:"✓",  color:"#22c97d", unread:true,  title:"Deal fechado com sucesso",  desc:"Alpha S.A. — confirmado.",              time:"há 23 min" },
-    { icon:"⏰", color:"#f59e0b", unread:true,  title:"Pagamento em atraso",       desc:"Moda Verde — fatura vencida.",           time:"há 2h"     },
-    { icon:"+",  color:"#4f6ef7", unread:true,  title:"Novo lead adicionado",      desc:"Beatriz Costa via formulário web.",      time:"há 3h"     },
-    { icon:"📅", color:"#a78bfa", unread:false, title:"Reunião às 15:00",          desc:"Demo com Tech Solutions Ltda.",          time:"hoje"      },
-    { icon:"📊", color:"#4f6ef7", unread:false, title:"Relatório mensal gerado",   desc:"Relatório de maio disponível.",          time:"há 1 dia"  },
+    { icon:"✓",  color:"#22c97d", unread:true,  title:"Negociação fechada com sucesso", desc:"Alpha S.A. — confirmado.",         time:"há 23 min" },
+    { icon:"⏰", color:"#f59e0b", unread:true,  title:"Pagamento em atraso",            desc:"Moda Verde — fatura vencida.",      time:"há 2h"     },
+    { icon:"+",  color:"#4f6ef7", unread:true,  title:"Novo lead adicionado",           desc:"Beatriz Costa via formulário web.", time:"há 3h"     },
+    { icon:"📅", color:"#a78bfa", unread:false, title:"Reunião às 15:00",               desc:"Demo com Tech Solutions Ltda.",     time:"hoje"      },
+    { icon:"📊", color:"#4f6ef7", unread:false, title:"Relatório mensal gerado",        desc:"Relatório de maio disponível.",     time:"há 1 dia"  },
   ]
   return (
     <Card title="Central de notificações" style={{ padding:0 }}>
@@ -1120,6 +1281,7 @@ function NotificationsView() {
   )
 }
 
+// ── Settings ───────────────────────────────────────────────────────
 function SettingsView({ user, onLogout }) {
   const [toggles, setToggles] = useState({ emailNotif:true, dealAlerts:true, weeklyReport:false, twoFactor:false, webhook:true })
   function Toggle({ k }) {
@@ -1166,18 +1328,18 @@ function SettingsView({ user, onLogout }) {
             color:"#ef4444", fontSize:11, cursor:"pointer", fontFamily:"inherit" }}>Sair</button>}/>
       </Section>
       <Section icon="🏢" title="Empresa">
-        <Row label="Nome"       right={<span style={{ fontSize:12, color:"#5a6478", fontFamily:"monospace" }}>Decillion</span>}/>
-        <Row label="Plano"      right={<Badge colorKey="purple" label="Pro"/>}/>
+        <Row label="Nome"         right={<span style={{ fontSize:12, color:"#5a6478", fontFamily:"monospace" }}>Decillion</span>}/>
+        <Row label="Plano"        right={<Badge colorKey="purple" label="Pro"/>}/>
         <Row label="Fuso horário" right={<span style={{ fontSize:11, color:"#5a6478", fontFamily:"monospace" }}>America/São_Paulo</span>}/>
       </Section>
       <Section icon="🔔" title="Notificações">
-        <Row label="Por email"        desc="Resumo diário"        right={<Toggle k="emailNotif"/>}/>
-        <Row label="Alertas de deals" desc="Ao fechar um deal"    right={<Toggle k="dealAlerts"/>}/>
+        <Row label="Por email"         desc="Resumo diário"       right={<Toggle k="emailNotif"/>}/>
+        <Row label="Alertas de negociações" desc="Ao fechar uma negociação" right={<Toggle k="dealAlerts"/>}/>
         <Row label="Relatório semanal" desc="Toda segunda-feira"  right={<Toggle k="weeklyReport"/>}/>
       </Section>
       <Section icon="🔒" title="Segurança">
-        <Row label="2FA" desc="Autenticação em dois fatores" right={<Toggle k="twoFactor"/>}/>
-        <Row label="Webhook" desc="Receber eventos em tempo real" right={<Toggle k="webhook"/>}/>
+        <Row label="2FA"     desc="Autenticação em dois fatores"   right={<Toggle k="twoFactor"/>}/>
+        <Row label="Webhook" desc="Receber eventos em tempo real"  right={<Toggle k="webhook"/>}/>
       </Section>
     </div>
   )
@@ -1200,20 +1362,18 @@ export default function App() {
   const { toasts, addToast, removeToast } = useToast()
   const [activeTab, setActiveTab] = useState("dashboard")
 
-  // Estado centralizado com persistência
-  const [clients,  setClients]  = useState(() => loadOrSeed(STORAGE_KEYS.clients,  SEED_CLIENTS))
-  const [deals,    setDeals]    = useState(() => loadOrSeed(STORAGE_KEYS.deals,    SEED_DEALS))
-  const [projects, setProjects] = useState(() => loadOrSeed(STORAGE_KEYS.projects, SEED_PROJECTS))
-  const [tasks,    setTasks]    = useState(() => loadOrSeed(STORAGE_KEYS.tasks,    SEED_TASKS))
+  // Estado centralizado — projects agora derivado de clients
+  const [clients, setClients] = useState(() => loadOrSeed(STORAGE_KEYS.clients, SEED_CLIENTS))
+  const [deals,   setDeals]   = useState(() => loadOrSeed(STORAGE_KEYS.deals,   SEED_DEALS))
+  const [tasks,   setTasks]   = useState(() => loadOrSeed(STORAGE_KEYS.tasks,   SEED_TASKS))
 
-  // Badges dinâmicos para nav
-  const pendingTasks = tasks.filter(t => !t.done).length
-  const badgeCounts  = {
+  // Badges dinâmicos para nav — projects count derivado de clients
+  const badgeCounts = useMemo(() => ({
     clients:      clients.length,
     deals:        deals.filter(d => d.stage !== "fechado").length,
-    projects:     projects.filter(p => p.status === "andamento").length,
-    pendingTasks,
-  }
+    projects:     clients.filter(c => c.projectStatus === "andamento").length,
+    pendingTasks: tasks.filter(t => !t.done).length,
+  }), [clients, deals, tasks])
 
   if (!user) {
     return (
@@ -1327,7 +1487,7 @@ export default function App() {
               {activeTab==="dashboard"     && <DashboardView     clients={clients} deals={deals}/>}
               {activeTab==="pipeline"      && <PipelineView      deals={deals} setDeals={setDeals} addToast={addToast}/>}
               {activeTab==="clients"       && <ClientsView       clients={clients} setClients={setClients} addToast={addToast}/>}
-              {activeTab==="projects"      && <ProjectsView      projects={projects}/>}
+              {activeTab==="projects"      && <ProjectsView      clients={clients}/>}
               {activeTab==="tasks"         && <TasksView         tasks={tasks} setTasks={setTasks} addToast={addToast}/>}
               {activeTab==="finance"       && <FinanceView       clients={clients}/>}
               {activeTab==="reports"       && <ReportsView       clients={clients} deals={deals}/>}
