@@ -7,7 +7,7 @@ import { useClients } from "./hooks/useClients"
 import { useToast }   from "./hooks/useToast"
 
 // ─── COMPONENTS ───────────────────────────────────────────────────────────────
-import LoginPage      from "./components/auth/LoginPage"
+import LoginPage      from "./components/shared/auth/LoginPage"
 import ToastContainer from "./components/shared/Toast"
 
 // ─── ICONS ────────────────────────────────────────────────────────────────────
