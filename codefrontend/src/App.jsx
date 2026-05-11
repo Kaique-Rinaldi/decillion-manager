@@ -1,4 +1,4 @@
-import { useEffect, useState, useCallback, useMemo } from "react"
+import { useEffect, useState, useCallback, useMemo, useRef } from "react"
 import { motion, AnimatePresence } from "framer-motion"
 import { useAuth }  from "./hooks/useAuth"
 import { useToast } from "./hooks/useToast"
@@ -6,7 +6,7 @@ import LoginPage      from "./components/shared/auth/LoginPage"
 import ToastContainer from "./components/shared/Toast"
 
 // ═══════════════════════════════════════════════════════════════════
-// 1. ENUMS CENTRALIZADOS — fonte única de verdade para todos os status
+// 1. ENUMS
 // ═══════════════════════════════════════════════════════════════════
 const PAYMENT_STATUS = {
   pendente: { label: "Pendente", badge: "amber" },
@@ -19,22 +19,25 @@ const PROJECT_STATUS = {
   cancelado: { label: "Cancelado",    badge: "gray"  },
 }
 const PIPELINE_STAGE = {
-  lead:      { label: "Lead",         color: "#60a5fa", order: 0 },
-  contato:   { label: "Contactado",   color: "#a78bfa", order: 1 },
-  proposta:  { label: "Proposta",     color: "#f59e0b", order: 2 },
-  negoc:     { label: "Negociação",   color: "#ec4899", order: 3 },
-  fechado:   { label: "Fechado ✓",    color: "#22c97d", order: 4 },
+  lead:     { label: "Lead",       color: "#60a5fa", order: 0 },
+  contato:  { label: "Contactado", color: "#a78bfa", order: 1 },
+  proposta: { label: "Proposta",   color: "#f59e0b", order: 2 },
+  negoc:    { label: "Negociação", color: "#ec4899", order: 3 },
+  fechado:  { label: "Fechado ✓",  color: "#22c97d", order: 4 },
 }
 const PIPELINE_STAGE_KEYS = ["lead","contato","proposta","negoc","fechado"]
 
-// Progresso automático por status do projeto
-const PROGRESS_BY_STATUS = {
-  andamento: 45,
-  concluido: 100,
-  cancelado: 0,
+// Kanban de projetos — colunas separadas dos status de pipeline
+const KANBAN_COLS = {
+  backlog:    { label: "Backlog",       color: "#8892a4" },
+  andamento:  { label: "Em andamento",  color: "#4f6ef7" },
+  review:     { label: "Em revisão",    color: "#f59e0b" },
+  concluido:  { label: "Concluído",     color: "#22c97d" },
 }
+const KANBAN_COL_KEYS = ["backlog","andamento","review","concluido"]
 
-// Transições permitidas no pipeline
+const PROGRESS_BY_STATUS = { andamento: 45, concluido: 100, cancelado: 0 }
+
 const ALLOWED_TRANSITIONS = {
   lead:     ["contato"],
   contato:  ["lead","proposta"],
@@ -44,43 +47,69 @@ const ALLOWED_TRANSITIONS = {
 }
 
 // ═══════════════════════════════════════════════════════════════════
-// 2. DADOS INICIAIS — clientes com projetos integrados e IDs únicos
+// 2. DADOS INICIAIS
 // ═══════════════════════════════════════════════════════════════════
 const SEED_CLIENTS = [
   {
     id:"CLI-1746983720001", name:"Marina Alves",    email:"marina@digitalstudio.com",   phone:"(11) 98765-4321", company:"Digital Studio",
     projectName:"Dashboard Analytics",  projectOwner:"Carlos M.",  projectStatus:"concluido", projectProgress:100,
     paymentStatus:"pago",     projectValue:8500,  startDate:"2024-02-01", endDate:"2024-04-30", notes:"Redesign site institucional.",
+    kanbanCol:"concluido", tags:["VIP","Website"],
+    activities:[
+      { id:"a1", type:"created",  text:"Cliente criado",                       date:"2024-02-01", user:"Admin" },
+      { id:"a2", type:"payment",  text:"Pagamento confirmado — R$ 8.500",      date:"2024-04-30", user:"Admin" },
+      { id:"a3", type:"status",   text:"Projeto concluído",                    date:"2024-04-30", user:"Carlos M." },
+    ],
   },
   {
     id:"CLI-1746983720002", name:"Carlos Mendonça", email:"carlos@techsolutions.com",   phone:"(11) 91234-5678", company:"Tech Solutions",
     projectName:"Integração CRM",       projectOwner:"Carlos M.",  projectStatus:"andamento", projectProgress:88,
     paymentStatus:"pendente",  projectValue:14200, startDate:"2024-03-15", endDate:"2024-07-15", notes:"Sistema de gestão interno.",
+    kanbanCol:"review", tags:["SaaS"],
+    activities:[
+      { id:"a1", type:"created",  text:"Cliente criado",                       date:"2024-03-15", user:"Admin" },
+      { id:"a2", type:"status",   text:"Projeto em revisão",                   date:"2024-06-01", user:"Carlos M." },
+    ],
   },
   {
     id:"CLI-1746983720003", name:"Beatriz Costa",   email:"bia@modaverde.com.br",       phone:"(21) 97654-3210", company:"Moda Verde",
     projectName:"E-commerce B2B",       projectOwner:"Rafael P.",  projectStatus:"andamento", projectProgress:45,
     paymentStatus:"atrasado",  projectValue:5800,  startDate:"2024-01-10", endDate:"2024-03-10", notes:"E-commerce sustentável.",
+    kanbanCol:"andamento", tags:["Urgente","E-commerce"],
+    activities:[
+      { id:"a1", type:"created",  text:"Cliente criado",                       date:"2024-01-10", user:"Admin" },
+      { id:"a2", type:"payment",  text:"Pagamento em atraso — R$ 5.800",       date:"2024-03-10", user:"Admin" },
+    ],
   },
   {
     id:"CLI-1746983720004", name:"Rafael Torres",   email:"rafael@grupoalpha.com",      phone:"(51) 99876-5432", company:"Grupo Alpha",
     projectName:"Redesign Portal v2",   projectOwner:"Mariana A.", projectStatus:"andamento", projectProgress:65,
     paymentStatus:"pago",     projectValue:22000, startDate:"2023-11-01", endDate:"2024-02-28", notes:"Plataforma SaaS.",
+    kanbanCol:"andamento", tags:["VIP","SaaS"],
+    activities:[
+      { id:"a1", type:"created",  text:"Cliente criado",                       date:"2023-11-01", user:"Admin" },
+      { id:"a2", type:"payment",  text:"Pagamento confirmado — R$ 22.000",     date:"2024-01-15", user:"Admin" },
+    ],
   },
   {
     id:"CLI-1746983720005", name:"Juliana Neves",   email:"ju@inovacaolab.io",          phone:"(41) 98123-7654", company:"Inovação Lab",
     projectName:"App Mobile",           projectOwner:"Rafael P.",  projectStatus:"cancelado", projectProgress:0,
     paymentStatus:"pendente",  projectValue:9300,  startDate:"2024-04-01", endDate:"2024-06-01", notes:"App mobile. Cancelado.",
+    kanbanCol:"backlog", tags:["Mobile"],
+    activities:[
+      { id:"a1", type:"created",  text:"Cliente criado",                       date:"2024-04-01", user:"Admin" },
+      { id:"a2", type:"status",   text:"Projeto cancelado",                    date:"2024-04-15", user:"Rafael P." },
+    ],
   },
 ]
 
 const SEED_DEALS = [
-  { id:"deal_001", clientId:"CLI-1746983720003", name:"Beatriz Costa",   company:"Moda Verde",     value:5800,  stage:"lead",     closedAt:null,        createdAt:"2024-05-12" },
-  { id:"deal_002", clientId:null,                name:"Tech Holding",    company:"Tech Holding",   value:15000, stage:"lead",     closedAt:null,        createdAt:"2024-05-15" },
-  { id:"deal_003", clientId:null,                name:"Grupo Omega",     company:"Grupo Omega",    value:22000, stage:"contato",  closedAt:null,        createdAt:"2024-05-10" },
-  { id:"deal_004", clientId:null,                name:"Startup Beta",    company:"Startup Beta",   value:6200,  stage:"contato",  closedAt:null,        createdAt:"2024-05-11" },
-  { id:"deal_005", clientId:"CLI-1746983720002", name:"Carlos Mendonça", company:"Tech Solutions", value:14200, stage:"proposta", closedAt:null,        createdAt:"2024-05-08" },
-  { id:"deal_006", clientId:"CLI-1746983720005", name:"Juliana Neves",   company:"Inovação Lab",   value:9300,  stage:"negoc",    closedAt:null,        createdAt:"2024-05-07" },
+  { id:"deal_001", clientId:"CLI-1746983720003", name:"Beatriz Costa",   company:"Moda Verde",     value:5800,  stage:"lead",     closedAt:null,         createdAt:"2024-05-12" },
+  { id:"deal_002", clientId:null,                name:"Tech Holding",    company:"Tech Holding",   value:15000, stage:"lead",     closedAt:null,         createdAt:"2024-05-15" },
+  { id:"deal_003", clientId:null,                name:"Grupo Omega",     company:"Grupo Omega",    value:22000, stage:"contato",  closedAt:null,         createdAt:"2024-05-10" },
+  { id:"deal_004", clientId:null,                name:"Startup Beta",    company:"Startup Beta",   value:6200,  stage:"contato",  closedAt:null,         createdAt:"2024-05-11" },
+  { id:"deal_005", clientId:"CLI-1746983720002", name:"Carlos Mendonça", company:"Tech Solutions", value:14200, stage:"proposta", closedAt:null,         createdAt:"2024-05-08" },
+  { id:"deal_006", clientId:"CLI-1746983720005", name:"Juliana Neves",   company:"Inovação Lab",   value:9300,  stage:"negoc",    closedAt:null,         createdAt:"2024-05-07" },
   { id:"deal_007", clientId:"CLI-1746983720001", name:"Marina Alves",    company:"Digital Studio", value:8500,  stage:"fechado",  closedAt:"2024-05-06", createdAt:"2024-04-01" },
   { id:"deal_008", clientId:"CLI-1746983720004", name:"Rafael Torres",   company:"Grupo Alpha",    value:22000, stage:"fechado",  closedAt:"2024-05-05", createdAt:"2024-03-01" },
 ]
@@ -96,19 +125,13 @@ const SEED_TASKS = [
 ]
 
 // ═══════════════════════════════════════════════════════════════════
-// 3. PERSISTÊNCIA — localStorage com schema versionado
+// 3. PERSISTÊNCIA
 // ═══════════════════════════════════════════════════════════════════
-const STORAGE_KEYS = {
-  clients: "dcl_v3_clients",
-  deals:   "dcl_v3_deals",
-  tasks:   "dcl_v3_tasks",
-}
+const STORAGE_KEYS = { clients:"dcl_v3_clients", deals:"dcl_v3_deals", tasks:"dcl_v3_tasks" }
 
 function loadOrSeed(key, seed) {
-  try {
-    const raw = localStorage.getItem(key)
-    return raw ? JSON.parse(raw) : seed
-  } catch { return seed }
+  try { const raw = localStorage.getItem(key); return raw ? JSON.parse(raw) : seed }
+  catch { return seed }
 }
 function persist(key, data) {
   try { localStorage.setItem(key, JSON.stringify(data)) } catch {}
@@ -120,6 +143,46 @@ function persist(key, data) {
 function normalize(str = "") {
   return str.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase().trim()
 }
+
+// ── Busca global completa (todos os campos relevantes) ─────────────
+function buildHaystack(c) {
+  return normalize([
+    c.id, c.name, c.email, c.company, c.phone,
+    c.projectName, c.projectOwner,
+    c.projectStatus, c.paymentStatus,
+    c.projectValue, c.notes,
+    ...(c.tags ?? []),
+  ].filter(Boolean).join(" "))
+}
+
+// ── Debounce hook ─────────────────────────────────────────────────
+function useDebounce(value, delay = 250) {
+  const [debounced, setDebounced] = useState(value)
+  useEffect(() => {
+    const t = setTimeout(() => setDebounced(value), delay)
+    return () => clearTimeout(t)
+  }, [value, delay])
+  return debounced
+}
+
+// ── Highlight de termo buscado ────────────────────────────────────
+function Highlight({ text = "", term = "" }) {
+  if (!term) return <>{text}</>
+  const normText = normalize(text)
+  const normTerm = normalize(term)
+  const idx = normText.indexOf(normTerm)
+  if (idx === -1) return <>{text}</>
+  return (
+    <>
+      {text.slice(0, idx)}
+      <mark style={{ background:"rgba(79,110,247,.35)", color:"#e8eaf0", borderRadius:2, padding:"0 1px" }}>
+        {text.slice(idx, idx + term.length)}
+      </mark>
+      {text.slice(idx + term.length)}
+    </>
+  )
+}
+
 function formatCurrency(value) {
   return new Intl.NumberFormat("pt-BR", { style:"currency", currency:"BRL" }).format(Number(value) || 0)
 }
@@ -127,6 +190,16 @@ function formatDate(iso) {
   if (!iso) return "—"
   const [y,m,d] = iso.split("-")
   return `${d}/${m}/${y}`
+}
+function relativeTime(iso) {
+  if (!iso) return ""
+  const diff = Date.now() - new Date(iso).getTime()
+  const days = Math.floor(diff / 86400000)
+  if (days === 0) return "hoje"
+  if (days === 1) return "ontem"
+  if (days < 30)  return `há ${days} dias`
+  if (days < 365) return `há ${Math.floor(days/30)} meses`
+  return `há ${Math.floor(days/365)} anos`
 }
 function initials(name = "") {
   return name.trim().split(" ").map(w => w[0]).slice(0,2).join("").toUpperCase()
@@ -139,15 +212,21 @@ const AVATAR_PALETTE = [
   { bg:"rgba(236,72,153,.15)",  fg:"#ec4899" },
 ]
 function avatarColor(name = "") {
-  const idx = name.charCodeAt(0) % AVATAR_PALETTE.length
+  const idx = (name.charCodeAt(0) || 0) % AVATAR_PALETTE.length
   return AVATAR_PALETTE[idx]
 }
-
-// Cor da barra de progresso conforme status
 function progressBarColor(status) {
   if (status === "concluido") return "#22c97d"
   if (status === "cancelado") return "#ef4444"
   return "#4f6ef7"
+}
+
+const ACTIVITY_ICON = {
+  created:  { icon:"＋", color:"#4f6ef7" },
+  payment:  { icon:"$",  color:"#22c97d" },
+  status:   { icon:"◎",  color:"#a78bfa" },
+  note:     { icon:"✎",  color:"#f59e0b" },
+  comment:  { icon:"✉",  color:"#60a5fa" },
 }
 
 // ═══════════════════════════════════════════════════════════════════
@@ -156,10 +235,10 @@ function progressBarColor(status) {
 const NAV_SECTIONS = [
   { label:"Principal", items:[
     { id:"dashboard", label:"Dashboard",    icon:"M3 3h7v7H3zM14 3h7v7h-7zM14 14h7v7h-7zM3 14h7v7H3z" },
-    { id:"pipeline",  label:"Pipeline CRM", icon:"M4 6h16M4 12h16M4 18h16", badgeKey:"deals"       },
+    { id:"pipeline",  label:"Pipeline CRM", icon:"M4 6h16M4 12h16M4 18h16", badgeKey:"deals" },
     { id:"clients",   label:"Clientes",     icon:"M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2M9 11a4 4 0 1 0 0-8 4 4 0 0 0 0 8zM23 21v-2a4 4 0 0 0-3-3.87M16 3.13a4 4 0 0 1 0 7.75", badgeKey:"clients" },
-    { id:"projects",  label:"Projetos",     icon:"M3 3h18v4H3zM3 10h18v4H3zM3 17h18v4H3z", badgeKey:"projects" },
-    { id:"tasks",     label:"Tarefas",      icon:"M9 11l3 3L22 4M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11", badgeKey:"pendingTasks" },
+    { id:"kanban",    label:"Kanban",        icon:"M3 3h5v18H3zM9 3h6v18H9zM16 3h5v18h-5z", badgeKey:"projects" },
+    { id:"tasks",     label:"Tarefas",       icon:"M9 11l3 3L22 4M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11", badgeKey:"pendingTasks" },
   ]},
   { label:"Financeiro", items:[
     { id:"finance",  label:"Financeiro", icon:"M12 2a10 10 0 1 0 0 20A10 10 0 0 0 12 2zM12 6v6l4 2" },
@@ -171,15 +250,15 @@ const NAV_SECTIONS = [
   ]},
 ]
 const PAGE_META = {
-  dashboard:     { title:"Dashboard",       sub:"Visão geral do sistema"    },
-  pipeline:      { title:"Pipeline CRM",    sub:"Kanban de oportunidades"   },
-  clients:       { title:"Clientes",        sub:"Base de contatos e contas" },
-  projects:      { title:"Projetos",        sub:"Gestão de projetos ativos" },
-  tasks:         { title:"Tarefas",         sub:"Gerenciamento de atividades"},
-  finance:       { title:"Financeiro",      sub:"Receitas e pagamentos"     },
-  reports:       { title:"Relatórios",      sub:"Análises e métricas"       },
-  notifications: { title:"Notificações",    sub:"Central de alertas"        },
-  settings:      { title:"Configurações",   sub:"Preferências do sistema"   },
+  dashboard:     { title:"Dashboard",      sub:"Visão geral do sistema"     },
+  pipeline:      { title:"Pipeline CRM",   sub:"Kanban de oportunidades"    },
+  clients:       { title:"Clientes",       sub:"Base de contatos e contas"  },
+  kanban:        { title:"Kanban",         sub:"Quadro de projetos"         },
+  tasks:         { title:"Tarefas",        sub:"Gerenciamento de atividades" },
+  finance:       { title:"Financeiro",     sub:"Receitas e pagamentos"      },
+  reports:       { title:"Relatórios",     sub:"Análises e métricas"        },
+  notifications: { title:"Notificações",   sub:"Central de alertas"         },
+  settings:      { title:"Configurações",  sub:"Preferências do sistema"    },
 }
 
 // ═══════════════════════════════════════════════════════════════════
@@ -200,7 +279,16 @@ function Badge({ colorKey, label }) {
     <span style={{ display:"inline-flex", alignItems:"center", gap:4, padding:"2px 7px",
       borderRadius:5, fontSize:9, fontWeight:700, fontFamily:"monospace",
       textTransform:"uppercase", letterSpacing:".3px", background:s.bg, color:s.color }}>
-      <span style={{ width:4, height:4, borderRadius:"50%", background:s.color, display:"inline-block" }} />
+      <span style={{ width:4, height:4, borderRadius:"50%", background:s.color, display:"inline-block" }}/>
+      {label}
+    </span>
+  )
+}
+
+function TagPill({ label }) {
+  return (
+    <span style={{ display:"inline-flex", padding:"2px 7px", borderRadius:20, fontSize:9,
+      fontFamily:"monospace", border:"1px solid rgba(255,255,255,.1)", color:"#8892a4", background:"#161b2a" }}>
       {label}
     </span>
   )
@@ -232,7 +320,7 @@ function StatCard({ label, value, delta, deltaType="up", iconPath, iconColor }) 
         <div style={{ display:"inline-flex", alignItems:"center", gap:3, marginTop:8,
           fontSize:10, fontFamily:"monospace", padding:"2px 6px", borderRadius:4,
           background: deltaType==="up" ? "rgba(34,201,125,.1)" : "rgba(239,68,68,.1)",
-          color:      deltaType==="up" ? "#22c97d"              : "#ef4444" }}>
+          color:      deltaType==="up" ? "#22c97d"             : "#ef4444" }}>
           {deltaType==="up" ? "↑" : "↓"} {delta}
         </div>
       )}
@@ -263,33 +351,411 @@ function SectionLabel({ children }) {
   )
 }
 
+// ── Sortable table header ─────────────────────────────────────────
+function SortTh({ label, field, sortBy, onSort, style={} }) {
+  const [sortField, sortDir] = sortBy.split("_")
+  const active = sortField === field
+  return (
+    <th onClick={() => onSort(field)}
+      style={{ padding:"10px 14px", textAlign:"left", fontSize:9, fontWeight:600,
+        textTransform:"uppercase", letterSpacing:".8px", color: active ? "#4f6ef7" : "#5a6478",
+        fontFamily:"monospace", borderBottom:"1px solid rgba(255,255,255,.05)",
+        cursor:"pointer", userSelect:"none", whiteSpace:"nowrap", ...style }}>
+      {label}
+      {active && <span style={{ marginLeft:4, fontSize:8 }}>{sortDir==="asc" ? "↑" : "↓"}</span>}
+      {!active && <span style={{ marginLeft:4, fontSize:8, opacity:.3 }}>↕</span>}
+    </th>
+  )
+}
+
+// ── Pagination ────────────────────────────────────────────────────
+function Pagination({ total, page, perPage, onPage, onPerPage }) {
+  const totalPages = Math.ceil(total / perPage)
+  if (totalPages <= 1 && total <= 10) return null
+  const pages = []
+  for (let i = 1; i <= totalPages; i++) {
+    if (i === 1 || i === totalPages || (i >= page - 1 && i <= page + 1)) pages.push(i)
+    else if (pages[pages.length-1] !== "…") pages.push("…")
+  }
+  const btnStyle = (active) => ({
+    minWidth:28, height:28, borderRadius:6, border:"1px solid",
+    borderColor: active ? "#4f6ef7" : "rgba(255,255,255,.08)",
+    background:  active ? "#4f6ef7" : "transparent",
+    color:       active ? "#fff"    : "#8892a4",
+    fontSize:11, fontFamily:"monospace", cursor: active ? "default" : "pointer",
+    display:"flex", alignItems:"center", justifyContent:"center", padding:"0 6px",
+  })
+  return (
+    <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between",
+      padding:"12px 16px", borderTop:"1px solid rgba(255,255,255,.05)" }}>
+      <div style={{ display:"flex", alignItems:"center", gap:6 }}>
+        <span style={{ fontSize:10, color:"#5a6478", fontFamily:"monospace" }}>Por página:</span>
+        {[10,25,50].map(n => (
+          <button key={n} onClick={() => { onPerPage(n); onPage(1) }}
+            style={{ ...btnStyle(perPage===n) }}>{n}</button>
+        ))}
+      </div>
+      <div style={{ display:"flex", alignItems:"center", gap:4 }}>
+        <button onClick={() => onPage(page-1)} disabled={page===1}
+          style={{ ...btnStyle(false), opacity: page===1 ? .3 : 1 }}>‹</button>
+        {pages.map((p, i) =>
+          p === "…"
+            ? <span key={i} style={{ color:"#5a6478", fontSize:11, padding:"0 2px" }}>…</span>
+            : <button key={p} onClick={() => onPage(p)} style={{ ...btnStyle(page===p) }}>{p}</button>
+        )}
+        <button onClick={() => onPage(page+1)} disabled={page===totalPages}
+          style={{ ...btnStyle(false), opacity: page===totalPages ? .3 : 1 }}>›</button>
+      </div>
+      <span style={{ fontSize:10, color:"#5a6478", fontFamily:"monospace" }}>
+        {total} resultado{total !== 1 ? "s" : ""}
+      </span>
+    </div>
+  )
+}
+
 // ═══════════════════════════════════════════════════════════════════
-// 7. VIEWS
+// 7. COMMAND PALETTE
+// ═══════════════════════════════════════════════════════════════════
+function CommandPalette({ open, onClose, clients, setActiveTab, openClientModal }) {
+  const [query, setQuery] = useState("")
+  const inputRef = useRef(null)
+  const debouncedQ = useDebounce(query, 120)
+
+  useEffect(() => { if (open) { setQuery(""); setTimeout(() => inputRef.current?.focus(), 50) } }, [open])
+
+  const STATIC_CMDS = [
+    { label:"Ir para Dashboard",       icon:"⊞", action: () => { setActiveTab("dashboard"); onClose() } },
+    { label:"Ir para Pipeline CRM",    icon:"≡", action: () => { setActiveTab("pipeline");  onClose() } },
+    { label:"Ir para Clientes",        icon:"◉", action: () => { setActiveTab("clients");   onClose() } },
+    { label:"Ir para Kanban",          icon:"▣", action: () => { setActiveTab("kanban");    onClose() } },
+    { label:"Ir para Tarefas",         icon:"✓", action: () => { setActiveTab("tasks");     onClose() } },
+    { label:"Ir para Financeiro",      icon:"$", action: () => { setActiveTab("finance");   onClose() } },
+    { label:"Ir para Relatórios",      icon:"↗", action: () => { setActiveTab("reports");   onClose() } },
+    { label:"Ir para Configurações",   icon:"⚙", action: () => { setActiveTab("settings");  onClose() } },
+  ]
+
+  const results = useMemo(() => {
+    const q = normalize(debouncedQ)
+    if (!q) return [{ group:"Ações", items: STATIC_CMDS.slice(0,6) }]
+    const cmds = STATIC_CMDS.filter(c => normalize(c.label).includes(q))
+    const found = clients.filter(c => buildHaystack(c).includes(q)).slice(0,5).map(c => ({
+      label: c.name,
+      sub:   c.company || c.email,
+      icon:  initials(c.name),
+      isClient: true,
+      action: () => { openClientModal(c); onClose() },
+    }))
+    const groups = []
+    if (found.length) groups.push({ group:"Clientes", items: found })
+    if (cmds.length)  groups.push({ group:"Ações",    items: cmds  })
+    return groups
+  }, [debouncedQ, clients])
+
+  if (!open) return null
+  return (
+    <div style={{ position:"fixed", inset:0, background:"rgba(0,0,0,.65)", zIndex:2000,
+      display:"flex", alignItems:"flex-start", justifyContent:"center", paddingTop:120,
+      backdropFilter:"blur(6px)" }} onClick={onClose}>
+      <motion.div initial={{ scale:.96, opacity:0, y:-8 }} animate={{ scale:1, opacity:1, y:0 }}
+        exit={{ scale:.96, opacity:0 }} transition={{ duration:.15 }}
+        onClick={e => e.stopPropagation()}
+        style={{ background:"#111520", border:"1px solid rgba(255,255,255,.12)", borderRadius:16,
+          width:"100%", maxWidth:560, boxShadow:"0 24px 80px rgba(0,0,0,.6)", overflow:"hidden" }}>
+        {/* Input */}
+        <div style={{ display:"flex", alignItems:"center", gap:10, padding:"14px 16px",
+          borderBottom:"1px solid rgba(255,255,255,.07)" }}>
+          <Icon d="M21 21l-4.35-4.35M17 11A6 6 0 1 1 5 11a6 6 0 0 1 12 0z" size={16}/>
+          <input ref={inputRef} value={query} onChange={e => setQuery(e.target.value)}
+            placeholder="Buscar clientes, ações, páginas…"
+            style={{ flex:1, background:"none", border:"none", outline:"none", fontSize:14,
+              color:"#e8eaf0", fontFamily:"inherit" }}/>
+          <span style={{ fontSize:9, fontFamily:"monospace", color:"#5a6478",
+            border:"1px solid rgba(255,255,255,.1)", padding:"2px 6px", borderRadius:4 }}>ESC</span>
+        </div>
+        {/* Results */}
+        <div style={{ maxHeight:380, overflowY:"auto" }}>
+          {results.length === 0
+            ? <div style={{ padding:"32px 16px", textAlign:"center", color:"#5a6478", fontSize:13 }}>
+                Nenhum resultado
+              </div>
+            : results.map(group => (
+              <div key={group.group}>
+                <div style={{ padding:"10px 16px 4px", fontSize:9, color:"#5a6478",
+                  fontFamily:"monospace", textTransform:"uppercase", letterSpacing:".6px" }}>
+                  {group.group}
+                </div>
+                {group.items.map((item, i) => (
+                  <div key={i} onClick={item.action}
+                    style={{ display:"flex", alignItems:"center", gap:10, padding:"10px 16px",
+                      cursor:"pointer", transition:"background .1s" }}
+                    onMouseEnter={e => e.currentTarget.style.background="#161b2a"}
+                    onMouseLeave={e => e.currentTarget.style.background="transparent"}>
+                    <div style={{ width:28, height:28, borderRadius:7, flexShrink:0,
+                      background: item.isClient ? avatarColor(item.label).bg : "rgba(79,110,247,.1)",
+                      color:      item.isClient ? avatarColor(item.label).fg : "#4f6ef7",
+                      display:"flex", alignItems:"center", justifyContent:"center",
+                      fontSize: item.isClient ? 9 : 13, fontWeight:700 }}>
+                      {item.icon}
+                    </div>
+                    <div>
+                      <div style={{ fontSize:13, color:"#e8eaf0" }}>{item.label}</div>
+                      {item.sub && <div style={{ fontSize:10, color:"#5a6478" }}>{item.sub}</div>}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            ))
+          }
+        </div>
+        <div style={{ padding:"8px 16px", borderTop:"1px solid rgba(255,255,255,.05)",
+          display:"flex", gap:12 }}>
+          {[["↵","selecionar"],["↑↓","navegar"],["ESC","fechar"]].map(([k,l]) => (
+            <span key={k} style={{ fontSize:9, color:"#5a6478", fontFamily:"monospace" }}>
+              <span style={{ background:"#1c2236", padding:"1px 5px", borderRadius:3,
+                marginRight:4, border:"1px solid rgba(255,255,255,.07)" }}>{k}</span>{l}
+            </span>
+          ))}
+        </div>
+      </motion.div>
+    </div>
+  )
+}
+
+// ═══════════════════════════════════════════════════════════════════
+// 8. CLIENT DETAIL MODAL
+// ═══════════════════════════════════════════════════════════════════
+function ClientDetailModal({ client, onClose, onEdit, onAddActivity }) {
+  const [tab, setTab] = useState("overview")
+  const [newNote, setNewNote] = useState(client.notes || "")
+  const [editingNote, setEditingNote] = useState(false)
+  const ps  = PAYMENT_STATUS[client.paymentStatus] ?? PAYMENT_STATUS.pendente
+  const prs = PROJECT_STATUS[client.projectStatus] ?? PROJECT_STATUS.andamento
+  const pal = avatarColor(client.name)
+
+  const TABS = ["overview","timeline","pagamentos","notas"]
+
+  return (
+    <div style={{ position:"fixed", inset:0, background:"rgba(0,0,0,.65)", zIndex:1500,
+      display:"flex", alignItems:"center", justifyContent:"center", padding:20,
+      backdropFilter:"blur(5px)" }} onClick={onClose}>
+      <motion.div initial={{ scale:.94, opacity:0, y:12 }} animate={{ scale:1, opacity:1, y:0 }}
+        exit={{ scale:.94, opacity:0 }} transition={{ duration:.18 }}
+        onClick={e => e.stopPropagation()}
+        style={{ background:"#111520", border:"1px solid rgba(255,255,255,.1)", borderRadius:18,
+          width:"100%", maxWidth:700, maxHeight:"88vh", display:"flex", flexDirection:"column",
+          boxShadow:"0 28px 80px rgba(0,0,0,.6)", overflow:"hidden" }}>
+
+        {/* Header */}
+        <div style={{ padding:"20px 24px", borderBottom:"1px solid rgba(255,255,255,.07)",
+          display:"flex", alignItems:"center", gap:14, flexShrink:0 }}>
+          <div style={{ width:44, height:44, borderRadius:11, background:pal.bg, color:pal.fg,
+            display:"flex", alignItems:"center", justifyContent:"center", fontSize:14, fontWeight:700, flexShrink:0 }}>
+            {initials(client.name)}
+          </div>
+          <div style={{ flex:1, minWidth:0 }}>
+            <div style={{ fontSize:16, fontWeight:600, color:"#e8eaf0" }}>{client.name}</div>
+            <div style={{ fontSize:11, color:"#5a6478", marginTop:1 }}>
+              {client.company} · {client.email}
+            </div>
+          </div>
+          <div style={{ display:"flex", gap:6, alignItems:"center" }}>
+            <Badge colorKey={ps.badge}  label={ps.label}/>
+            <Badge colorKey={prs.badge} label={prs.label}/>
+            <button onClick={() => onEdit(client)}
+              style={{ marginLeft:8, padding:"5px 12px", borderRadius:7, fontSize:11,
+                background:"rgba(79,110,247,.1)", border:"1px solid rgba(79,110,247,.2)",
+                color:"#4f6ef7", cursor:"pointer", fontFamily:"inherit" }}>Editar</button>
+            <button onClick={onClose}
+              style={{ width:28, height:28, borderRadius:7, background:"rgba(255,255,255,.05)",
+                border:"1px solid rgba(255,255,255,.1)", color:"#8892a4", cursor:"pointer",
+                display:"flex", alignItems:"center", justifyContent:"center", fontSize:16 }}>×</button>
+          </div>
+        </div>
+
+        {/* Tabs */}
+        <div style={{ display:"flex", gap:0, padding:"0 24px", borderBottom:"1px solid rgba(255,255,255,.06)",
+          flexShrink:0 }}>
+          {TABS.map(t => (
+            <button key={t} onClick={() => setTab(t)}
+              style={{ padding:"10px 14px", fontSize:12, border:"none", background:"none",
+                cursor:"pointer", fontFamily:"inherit", textTransform:"capitalize",
+                color: tab===t ? "#e8eaf0" : "#5a6478",
+                borderBottom: tab===t ? "2px solid #4f6ef7" : "2px solid transparent",
+                transition:"all .13s" }}>
+              {t}
+            </button>
+          ))}
+        </div>
+
+        {/* Body */}
+        <div style={{ flex:1, overflowY:"auto", padding:24 }}>
+          {/* ── Overview ── */}
+          {tab === "overview" && (
+            <div>
+              <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:10, marginBottom:20 }}>
+                {[
+                  { l:"Valor do projeto", v:formatCurrency(client.projectValue), c:"#22c97d" },
+                  { l:"Telefone",         v:client.phone || "—",                  c:"#e8eaf0" },
+                  { l:"Início",           v:formatDate(client.startDate),          c:"#e8eaf0" },
+                  { l:"Entrega",          v:formatDate(client.endDate),            c:"#e8eaf0" },
+                  { l:"Responsável",      v:client.projectOwner || "—",            c:"#e8eaf0" },
+                  { l:"ID",               v:client.id,                             c:"#5a6478" },
+                ].map(f => (
+                  <div key={f.l} style={{ background:"#161b2a", borderRadius:9, padding:"10px 14px",
+                    border:"1px solid rgba(255,255,255,.06)" }}>
+                    <div style={{ fontSize:9, color:"#5a6478", fontFamily:"monospace",
+                      textTransform:"uppercase", letterSpacing:".5px", marginBottom:5 }}>{f.l}</div>
+                    <div style={{ fontSize:13, fontWeight:500, color:f.c, fontFamily: f.l==="ID" ? "monospace" : "inherit",
+                      fontSize: f.l==="ID" ? 10 : 13 }}>{f.v}</div>
+                  </div>
+                ))}
+              </div>
+              {/* Progress */}
+              <div style={{ background:"#161b2a", borderRadius:9, padding:"12px 14px",
+                border:"1px solid rgba(255,255,255,.06)", marginBottom:16 }}>
+                <div style={{ display:"flex", justifyContent:"space-between", marginBottom:8 }}>
+                  <span style={{ fontSize:11, color:"#8892a4" }}>{client.projectName}</span>
+                  <span style={{ fontSize:11, fontFamily:"monospace", color:"#5a6478" }}>{client.projectProgress}%</span>
+                </div>
+                <div style={{ height:6, background:"#1c2236", borderRadius:4, overflow:"hidden" }}>
+                  <div style={{ height:"100%", borderRadius:4,
+                    width:`${client.projectProgress}%`,
+                    background: progressBarColor(client.projectStatus),
+                    transition:"width .4s" }}/>
+                </div>
+              </div>
+              {/* Tags */}
+              {(client.tags || []).length > 0 && (
+                <div style={{ display:"flex", gap:6, flexWrap:"wrap" }}>
+                  {client.tags.map(t => <TagPill key={t} label={t}/>)}
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* ── Timeline ── */}
+          {tab === "timeline" && (
+            <div>
+              <button onClick={() => onAddActivity(client.id)}
+                style={{ marginBottom:16, padding:"6px 14px", borderRadius:7, fontSize:11,
+                  background:"rgba(79,110,247,.1)", border:"1px solid rgba(79,110,247,.2)",
+                  color:"#4f6ef7", cursor:"pointer", fontFamily:"inherit" }}>
+                + Registrar atividade
+              </button>
+              {(client.activities || []).length === 0
+                ? <div style={{ color:"#5a6478", fontSize:13, textAlign:"center", padding:"32px 0" }}>Nenhuma atividade</div>
+                : [...(client.activities)].reverse().map((act, i, arr) => {
+                    const meta = ACTIVITY_ICON[act.type] ?? ACTIVITY_ICON.note
+                    return (
+                      <div key={act.id} style={{ display:"flex", gap:12, paddingBottom:16,
+                        borderLeft: i < arr.length-1 ? "1px solid rgba(255,255,255,.07)" : "none",
+                        marginLeft:14, paddingLeft:20, position:"relative" }}>
+                        <div style={{ position:"absolute", left:-10, top:0, width:20, height:20,
+                          borderRadius:"50%", background:meta.color+"22", color:meta.color,
+                          display:"flex", alignItems:"center", justifyContent:"center",
+                          fontSize:10, border:`1px solid ${meta.color}44`, flexShrink:0 }}>
+                          {meta.icon}
+                        </div>
+                        <div style={{ flex:1 }}>
+                          <div style={{ fontSize:12, color:"#e8eaf0" }}>{act.text}</div>
+                          <div style={{ fontSize:10, color:"#5a6478", marginTop:3, fontFamily:"monospace" }}>
+                            {act.user} · {relativeTime(act.date)} · {formatDate(act.date)}
+                          </div>
+                        </div>
+                      </div>
+                    )
+                  })
+              }
+            </div>
+          )}
+
+          {/* ── Pagamentos ── */}
+          {tab === "pagamentos" && (
+            <div>
+              <div style={{ background:"#161b2a", borderRadius:9, padding:"16px", border:"1px solid rgba(255,255,255,.06)",
+                display:"flex", alignItems:"center", justifyContent:"space-between", marginBottom:16 }}>
+                <div>
+                  <div style={{ fontSize:9, color:"#5a6478", fontFamily:"monospace", textTransform:"uppercase",
+                    letterSpacing:".6px", marginBottom:6 }}>Valor total</div>
+                  <div style={{ fontSize:24, fontWeight:600, color:"#22c97d", fontFamily:"monospace" }}>
+                    {formatCurrency(client.projectValue)}
+                  </div>
+                </div>
+                <Badge colorKey={ps.badge} label={ps.label}/>
+              </div>
+              <div style={{ background:"#161b2a", borderRadius:9, padding:"14px",
+                border:"1px solid rgba(255,255,255,.06)" }}>
+                {[
+                  { l:"Status", v:ps.label },
+                  { l:"Início do projeto", v:formatDate(client.startDate) },
+                  { l:"Entrega", v:formatDate(client.endDate) },
+                  { l:"Empresa", v:client.company || "—" },
+                ].map((r, i, a) => (
+                  <div key={r.l} style={{ display:"flex", justifyContent:"space-between",
+                    padding:"8px 0", borderBottom: i < a.length-1 ? "1px solid rgba(255,255,255,.04)" : "none" }}>
+                    <span style={{ fontSize:11, color:"#5a6478" }}>{r.l}</span>
+                    <span style={{ fontSize:11, color:"#e8eaf0", fontFamily:"monospace" }}>{r.v}</span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* ── Notas ── */}
+          {tab === "notas" && (
+            <div>
+              <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:12 }}>
+                <span style={{ fontSize:11, color:"#5a6478" }}>Observações internas</span>
+                <button onClick={() => setEditingNote(!editingNote)}
+                  style={{ padding:"4px 10px", borderRadius:6, fontSize:10, cursor:"pointer",
+                    fontFamily:"inherit", background:"rgba(79,110,247,.1)",
+                    border:"1px solid rgba(79,110,247,.2)", color:"#4f6ef7" }}>
+                  {editingNote ? "Salvar" : "Editar"}
+                </button>
+              </div>
+              {editingNote
+                ? <textarea value={newNote} onChange={e => setNewNote(e.target.value)}
+                    style={{ width:"100%", minHeight:160, background:"#161b2a",
+                      border:"1px solid rgba(79,110,247,.3)", borderRadius:9, padding:"12px 14px",
+                      fontSize:13, color:"#e8eaf0", fontFamily:"inherit", outline:"none", resize:"vertical",
+                      lineHeight:1.6, boxSizing:"border-box" }}/>
+                : <div style={{ background:"#161b2a", borderRadius:9, padding:"12px 14px",
+                    border:"1px solid rgba(255,255,255,.06)", minHeight:100,
+                    fontSize:13, color: newNote ? "#8892a4" : "#3a4255", lineHeight:1.6 }}>
+                    {newNote || "Nenhuma observação. Clique em Editar para adicionar."}
+                  </div>
+              }
+            </div>
+          )}
+        </div>
+      </motion.div>
+    </div>
+  )
+}
+
+// ═══════════════════════════════════════════════════════════════════
+// 9. VIEWS
 // ═══════════════════════════════════════════════════════════════════
 
 // ── Dashboard ──────────────────────────────────────────────────────
 function DashboardView({ clients, deals }) {
-  const activeClients  = clients.filter(c => c.projectStatus === "andamento").length
-  const totalRevenue   = clients.reduce((s,c) => s + (c.paymentStatus === "pago" ? c.projectValue : 0), 0)
-  const openDeals      = deals.filter(d => d.stage !== "fechado").length
-  const wonDeals       = deals.filter(d => d.stage === "fechado")
-  const convRate       = deals.length > 0 ? Math.round((wonDeals.length / deals.length) * 100) : 0
+  const activeClients = clients.filter(c => c.projectStatus === "andamento").length
+  const totalRevenue  = clients.reduce((s,c) => s + (c.paymentStatus === "pago" ? c.projectValue : 0), 0)
+  const openDeals     = deals.filter(d => d.stage !== "fechado").length
+  const wonDeals      = deals.filter(d => d.stage === "fechado")
+  const convRate      = deals.length > 0 ? Math.round((wonDeals.length / deals.length) * 100) : 0
 
-  const stageCounts = PIPELINE_STAGE_KEYS.map(k => ({
-    n: PIPELINE_STAGE[k].label,
-    c: deals.filter(d => d.stage === k).length,
-    color: PIPELINE_STAGE[k].color,
+  const stageCounts   = PIPELINE_STAGE_KEYS.map(k => ({
+    n: PIPELINE_STAGE[k].label, c: deals.filter(d => d.stage === k).length, color: PIPELINE_STAGE[k].color,
   }))
   const maxStageCount = Math.max(...stageCounts.map(s => s.c), 1)
 
-  const REVENUE_DATA = [
-    { month:"Dez", value:28 },{ month:"Jan", value:34 },
-    { month:"Fev", value:31 },{ month:"Mar", value:42 },
-    { month:"Abr", value:38 },
+  const REVENUE_DATA  = [
+    { month:"Dez", value:28 },{ month:"Jan", value:34 },{ month:"Fev", value:31 },
+    { month:"Mar", value:42 },{ month:"Abr", value:38 },
     { month:"Mai", value: wonDeals.reduce((s,d) => s + d.value, 0) / 1000 || 47 },
   ]
-  const maxR = Math.max(...REVENUE_DATA.map(r => r.value))
-
+  const maxR  = Math.max(...REVENUE_DATA.map(r => r.value))
   const recent = [...clients].sort((a,b) => (b.createdAt||"").localeCompare(a.createdAt||"")).slice(0,5)
 
   return (
@@ -308,7 +774,6 @@ function DashboardView({ clients, deals }) {
           delta="negociações ganhas / total"
           iconPath="M18 20V10M12 20V4M6 20v-6" iconColor="purple"/>
       </div>
-
       <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:12, marginBottom:20 }}>
         <Card title="Receita (últimos 6 meses)">
           <div style={{ display:"flex", alignItems:"flex-end", gap:5, height:80 }}>
@@ -325,16 +790,17 @@ function DashboardView({ clients, deals }) {
         <Card title="Pipeline por etapa" sub="Negociações ativas">
           {stageCounts.map((s,i) => (
             <div key={i} style={{ display:"flex", alignItems:"center", gap:8, marginBottom:8 }}>
-              <div style={{ fontSize:10, color:"#8892a4", width:76, fontFamily:"monospace", whiteSpace:"nowrap", overflow:"hidden", textOverflow:"ellipsis" }}>{s.n}</div>
+              <div style={{ fontSize:10, color:"#8892a4", width:76, fontFamily:"monospace",
+                whiteSpace:"nowrap", overflow:"hidden", textOverflow:"ellipsis" }}>{s.n}</div>
               <div style={{ flex:1, background:"#1c2236", borderRadius:4, height:8, overflow:"hidden" }}>
-                <div style={{ background:s.color, height:"100%", width:`${(s.c/maxStageCount)*100}%`, borderRadius:4, transition:"width .4s" }}/>
+                <div style={{ background:s.color, height:"100%",
+                  width:`${(s.c/maxStageCount)*100}%`, borderRadius:4, transition:"width .4s" }}/>
               </div>
               <div style={{ fontSize:10, color:"#5a6478", fontFamily:"monospace", width:14, textAlign:"right" }}>{s.c}</div>
             </div>
           ))}
         </Card>
       </div>
-
       <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:12 }}>
         <Card title="Clientes recentes">
           {recent.length === 0
@@ -346,11 +812,11 @@ function DashboardView({ clients, deals }) {
                 <div key={c.id} style={{ display:"flex", alignItems:"center", gap:10, padding:"9px 0",
                   borderBottom: i<recent.length-1 ? "1px solid rgba(255,255,255,.05)" : "none" }}>
                   <div style={{ width:28, height:28, borderRadius:7, background:pal.bg, color:pal.fg,
-                    display:"flex", alignItems:"center", justifyContent:"center", fontSize:9, fontWeight:700, flexShrink:0 }}>
-                    {initials(c.name)}
-                  </div>
+                    display:"flex", alignItems:"center", justifyContent:"center",
+                    fontSize:9, fontWeight:700, flexShrink:0 }}>{initials(c.name)}</div>
                   <div style={{ flex:1, minWidth:0 }}>
-                    <div style={{ fontSize:12, fontWeight:500, color:"#e8eaf0", overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>{c.name}</div>
+                    <div style={{ fontSize:12, fontWeight:500, color:"#e8eaf0", overflow:"hidden",
+                      textOverflow:"ellipsis", whiteSpace:"nowrap" }}>{c.name}</div>
                     <div style={{ fontSize:10, color:"#5a6478" }}>{c.company || c.email}</div>
                   </div>
                   <div style={{ textAlign:"right", flexShrink:0 }}>
@@ -397,12 +863,11 @@ function DashboardView({ clients, deals }) {
 // ── Pipeline ───────────────────────────────────────────────────────
 function PipelineView({ deals, setDeals, addToast }) {
   const [draggingId, setDraggingId] = useState(null)
-  const [overStage, setOverStage]   = useState(null)
+  const [overStage,  setOverStage]  = useState(null)
 
-  const totalValue  = deals.reduce((s,d) => s + d.value, 0)
-  const openDeals   = deals.filter(d => d.stage !== "fechado")
-  const avgTicket   = openDeals.length > 0
-    ? openDeals.reduce((s,d) => s + d.value, 0) / openDeals.length : 0
+  const totalValue = deals.reduce((s,d) => s + d.value, 0)
+  const openDeals  = deals.filter(d => d.stage !== "fechado")
+  const avgTicket  = openDeals.length > 0 ? openDeals.reduce((s,d) => s + d.value, 0) / openDeals.length : 0
 
   function onDragStart(id) { setDraggingId(id) }
   function onDragOver(e, stageKey) { e.preventDefault(); setOverStage(stageKey) }
@@ -411,21 +876,17 @@ function PipelineView({ deals, setDeals, addToast }) {
     if (!draggingId) return
     const deal = deals.find(d => d.id === draggingId)
     if (!deal || deal.stage === targetStage) { setDraggingId(null); return }
-
     const allowed = ALLOWED_TRANSITIONS[deal.stage] ?? []
     if (!allowed.includes(targetStage)) {
       addToast(`Transição "${PIPELINE_STAGE[deal.stage].label}" → "${PIPELINE_STAGE[targetStage].label}" não permitida.`, "error")
-      setDraggingId(null)
-      return
+      setDraggingId(null); return
     }
-
     const updated = deals.map(d =>
       d.id === draggingId
         ? { ...d, stage: targetStage, closedAt: targetStage === "fechado" ? new Date().toISOString().split("T")[0] : null }
         : d
     )
-    setDeals(updated)
-    persist(STORAGE_KEYS.deals, updated)
+    setDeals(updated); persist(STORAGE_KEYS.deals, updated)
     addToast(`Negociação movida para "${PIPELINE_STAGE[targetStage].label}"`, "success")
     setDraggingId(null)
   }
@@ -443,7 +904,7 @@ function PipelineView({ deals, setDeals, addToast }) {
               onDragLeave={() => setOverStage(null)}
               onDrop={() => onDrop(stageKey)}
               style={{ background: isOver ? stage.color+"14" : "#111520",
-                border: `1px solid ${isOver ? stage.color+"60" : "rgba(255,255,255,.06)"}`,
+                border:`1px solid ${isOver ? stage.color+"60" : "rgba(255,255,255,.06)"}`,
                 borderRadius:10, padding:10, minHeight:120, transition:"all .15s" }}>
               <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", marginBottom:10 }}>
                 <div style={{ fontSize:10, fontWeight:700, textTransform:"uppercase",
@@ -478,19 +939,23 @@ function PipelineView({ deals, setDeals, addToast }) {
         })}
       </div>
       <div style={{ display:"grid", gridTemplateColumns:"repeat(3,1fr)", gap:12 }}>
-        <StatCard label="Valor total pipeline"  value={formatCurrency(totalValue)}/>
-        <StatCard label="Ticket médio"           value={formatCurrency(avgTicket)}/>
-        <StatCard label="Negociações em aberto"  value={openDeals.length}/>
+        <StatCard label="Valor total pipeline" value={formatCurrency(totalValue)}/>
+        <StatCard label="Ticket médio"          value={formatCurrency(avgTicket)}/>
+        <StatCard label="Negociações em aberto" value={openDeals.length}/>
       </div>
     </div>
   )
 }
 
-// ── Clients ────────────────────────────────────────────────────────
-function ClientsView({ clients, setClients, addToast }) {
-  const [query,         setQuery]         = useState("")
+// ── Clients (com busca avançada + filtros + ordenação + paginação + modal) ──
+function ClientsView({ clients, setClients, addToast, openClientModal }) {
+  const [rawQuery,      setRawQuery]      = useState("")
   const [filterPayment, setFilterPayment] = useState("all")
   const [filterProject, setFilterProject] = useState("all")
+  const [filterOwner,   setFilterOwner]   = useState("all")
+  const [filterTag,     setFilterTag]     = useState("all")
+  const [valueMin,      setValueMin]      = useState("")
+  const [valueMax,      setValueMax]      = useState("")
   const [sortBy,        setSortBy]        = useState("createdAt_desc")
   const [showForm,      setShowForm]      = useState(false)
   const [editingId,     setEditingId]     = useState(null)
@@ -498,21 +963,40 @@ function ClientsView({ clients, setClients, addToast }) {
   const [form,          setForm]          = useState({})
   const [formErrors,    setFormErrors]    = useState({})
   const [saving,        setSaving]        = useState(false)
+  const [page,          setPage]          = useState(1)
+  const [perPage,       setPerPage]       = useState(10)
+  const [showAdvanced,  setShowAdvanced]  = useState(false)
+
+  const query = useDebounce(rawQuery, 250)
+
+  const allOwners = useMemo(() =>
+    [...new Set(clients.map(c => c.projectOwner).filter(Boolean))], [clients])
+  const allTags   = useMemo(() =>
+    [...new Set(clients.flatMap(c => c.tags || []))], [clients])
+
+  function toggleSort(field) {
+    setSortBy(prev => {
+      const [pf, pd] = prev.split("_")
+      if (pf === field) return `${field}_${pd === "asc" ? "desc" : "asc"}`
+      return `${field}_asc`
+    })
+    setPage(1)
+  }
 
   const filtered = useMemo(() => {
-    const q = normalize(query)
+    const q    = normalize(query)
+    const vMin = valueMin !== "" ? Number(valueMin) : null
+    const vMax = valueMax !== "" ? Number(valueMax) : null
     let result = clients.filter(c => {
-      if (q) {
-        const haystack = normalize(`${c.name} ${c.email} ${c.company||""} ${c.projectName||""} ${c.projectOwner||""} ${c.id||""}`)
-        if (!haystack.includes(q)) return false
-      }
-      const ps  = c.paymentStatus || "pendente"
-      const prs = c.projectStatus || "andamento"
-      if (filterPayment !== "all" && ps  !== filterPayment) return false
-      if (filterProject !== "all" && prs !== filterProject) return false
+      if (q && !buildHaystack(c).includes(q)) return false
+      if (filterPayment !== "all" && (c.paymentStatus || "pendente") !== filterPayment) return false
+      if (filterProject !== "all" && (c.projectStatus || "andamento") !== filterProject) return false
+      if (filterOwner   !== "all" && c.projectOwner !== filterOwner) return false
+      if (filterTag     !== "all" && !(c.tags || []).includes(filterTag)) return false
+      if (vMin !== null && c.projectValue < vMin) return false
+      if (vMax !== null && c.projectValue > vMax) return false
       return true
     })
-
     const [field, dir] = sortBy.split("_")
     result.sort((a, b) => {
       let va = a[field] ?? "", vb = b[field] ?? ""
@@ -523,26 +1007,25 @@ function ClientsView({ clients, setClients, addToast }) {
       return 0
     })
     return result
-  }, [clients, query, filterPayment, filterProject, sortBy])
+  }, [clients, query, filterPayment, filterProject, filterOwner, filterTag, valueMin, valueMax, sortBy])
 
-  const hasFilters = query || filterPayment !== "all" || filterProject !== "all"
+  const paginated = useMemo(() => {
+    const start = (page-1) * perPage
+    return filtered.slice(start, start + perPage)
+  }, [filtered, page, perPage])
+
+  const hasFilters = rawQuery || filterPayment !== "all" || filterProject !== "all"
+    || filterOwner !== "all" || filterTag !== "all" || valueMin !== "" || valueMax !== ""
 
   const totalValue   = useMemo(() => clients.reduce((s,c) => s + c.projectValue, 0), [clients])
   const paidValue    = useMemo(() => clients.filter(c => c.paymentStatus==="pago").reduce((s,c) => s + c.projectValue, 0), [clients])
   const pendingValue = useMemo(() => clients.filter(c => c.paymentStatus!=="pago").reduce((s,c) => s + c.projectValue, 0), [clients])
 
   function openCreate() {
-    setForm({ paymentStatus:"pendente", projectStatus:"andamento", projectProgress: PROGRESS_BY_STATUS["andamento"] })
-    setFormErrors({})
-    setEditingId(null)
-    setShowForm(true)
+    setForm({ paymentStatus:"pendente", projectStatus:"andamento", projectProgress:PROGRESS_BY_STATUS["andamento"] })
+    setFormErrors({}); setEditingId(null); setShowForm(true)
   }
-  function openEdit(c) {
-    setForm({ ...c })
-    setFormErrors({})
-    setEditingId(c.id)
-    setShowForm(true)
-  }
+  function openEdit(c) { setForm({...c}); setFormErrors({}); setEditingId(c.id); setShowForm(true) }
   function closeForm() { setShowForm(false); setEditingId(null) }
 
   function validateForm(f) {
@@ -568,53 +1051,44 @@ function ClientsView({ clients, setClients, addToast }) {
     if (Object.keys(errs).length) { setFormErrors(errs); return }
     setSaving(true)
     await new Promise(r => setTimeout(r, 350))
-
     const progress = Math.min(100, Math.max(0, Number(form.projectProgress) || 0))
-
     if (editingId) {
       const updated = clients.map(c =>
         c.id === editingId
-          ? { ...c, ...form, projectValue: Number(form.projectValue), projectProgress: progress }
+          ? { ...c, ...form, projectValue:Number(form.projectValue), projectProgress:progress }
           : c
       )
-      setClients(updated)
-      persist(STORAGE_KEYS.clients, updated)
+      setClients(updated); persist(STORAGE_KEYS.clients, updated)
       addToast("Cliente atualizado!", "success")
     } else {
       const newClient = {
-        ...form,
-        id: `CLI-${Date.now()}`,
-        projectValue: Number(form.projectValue),
-        projectProgress: progress,
-        createdAt: new Date().toISOString(),
+        ...form, id:`CLI-${Date.now()}`,
+        projectValue:Number(form.projectValue), projectProgress:progress,
+        createdAt:new Date().toISOString(),
+        kanbanCol:"backlog", tags:[], activities:[
+          { id:`a${Date.now()}`, type:"created", text:"Cliente criado", date:new Date().toISOString().split("T")[0], user:"Admin" }
+        ],
       }
       const updated = [newClient, ...clients]
-      setClients(updated)
-      persist(STORAGE_KEYS.clients, updated)
+      setClients(updated); persist(STORAGE_KEYS.clients, updated)
       addToast("Cliente adicionado!", "success")
     }
-    setSaving(false)
-    closeForm()
+    setSaving(false); closeForm()
   }
 
   function handleDelete(id) {
     const updated = clients.filter(c => c.id !== id)
-    setClients(updated)
-    persist(STORAGE_KEYS.clients, updated)
-    addToast("Cliente removido.", "warning")
-    setConfirmId(null)
+    setClients(updated); persist(STORAGE_KEYS.clients, updated)
+    addToast("Cliente removido.", "warning"); setConfirmId(null)
   }
 
   function setF(k, v) {
     setForm(p => {
-      const next = { ...p, [k]: v }
-      // Progresso automático ao mudar status — mas preserva edição manual
-      if (k === "projectStatus" && v in PROGRESS_BY_STATUS) {
-        next.projectProgress = PROGRESS_BY_STATUS[v]
-      }
+      const next = { ...p, [k]:v }
+      if (k === "projectStatus" && v in PROGRESS_BY_STATUS) next.projectProgress = PROGRESS_BY_STATUS[v]
       return next
     })
-    setFormErrors(p => ({ ...p, [k]:"" }))
+    setFormErrors(p => ({...p, [k]:""}))
   }
 
   const inputStyle = {
@@ -631,7 +1105,7 @@ function ClientsView({ clients, setClients, addToast }) {
 
   return (
     <div>
-      {/* Summary bar */}
+      {/* Summary */}
       <div style={{ display:"flex", gap:10, marginBottom:14, flexWrap:"wrap" }}>
         {[
           { l:"Total faturado", v:formatCurrency(totalValue),   c:"#e8eaf0" },
@@ -640,8 +1114,10 @@ function ClientsView({ clients, setClients, addToast }) {
         ].map(s => (
           <div key={s.l} style={{ background:"#111520", border:"1px solid rgba(255,255,255,.06)",
             borderRadius:10, padding:"10px 16px", flex:1, minWidth:130 }}>
-            <div style={{ fontSize:9, color:"#5a6478", textTransform:"uppercase", letterSpacing:".6px", fontFamily:"monospace", marginBottom:4 }}>{s.l}</div>
-            <div style={{ fontSize:17, fontWeight:700, color:s.c, fontFamily:"monospace", letterSpacing:"-.3px" }}>{s.v}</div>
+            <div style={{ fontSize:9, color:"#5a6478", textTransform:"uppercase", letterSpacing:".6px",
+              fontFamily:"monospace", marginBottom:4 }}>{s.l}</div>
+            <div style={{ fontSize:17, fontWeight:700, color:s.c, fontFamily:"monospace",
+              letterSpacing:"-.3px" }}>{s.v}</div>
           </div>
         ))}
       </div>
@@ -651,25 +1127,19 @@ function ClientsView({ clients, setClients, addToast }) {
         <div style={{ display:"flex", alignItems:"center", gap:8, background:"#161b2a",
           border:"1px solid rgba(255,255,255,.08)", borderRadius:7, padding:"6px 10px", flex:1, minWidth:200 }}>
           <Icon d="M21 21l-4.35-4.35M17 11A6 6 0 1 1 5 11a6 6 0 0 1 12 0z" size={13}/>
-          <input value={query} onChange={e => setQuery(e.target.value)}
-            placeholder="Buscar por nome, email, empresa, ID…"
+          <input value={rawQuery} onChange={e => { setRawQuery(e.target.value); setPage(1) }}
+            placeholder="Buscar por nome, email, empresa, ID, telefone, valor, tag…"
             style={{ background:"none", border:"none", outline:"none", fontSize:12,
               color:"#e8eaf0", fontFamily:"inherit", width:"100%" }}/>
-          {query && <button onClick={() => setQuery("")}
+          {rawQuery && <button onClick={() => setRawQuery("")}
             style={{ background:"none", border:"none", cursor:"pointer", color:"#5a6478", fontSize:16, lineHeight:1 }}>×</button>}
         </div>
-        <select value={sortBy} onChange={e => setSortBy(e.target.value)}
-          style={{ ...inputStyle, width:"auto", padding:"7px 28px 7px 10px", cursor:"pointer",
-            backgroundImage:"url(\"data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='10' viewBox='0 0 24 24' fill='none' stroke='%238892a4' stroke-width='2'%3E%3Cpath d='M6 9l6 6 6-6'/%3E%3C/svg%3E\")",
-            backgroundRepeat:"no-repeat", backgroundPosition:"right 10px center", appearance:"none" }}>
-          <option value="createdAt_desc">Mais recentes</option>
-          <option value="createdAt_asc">Mais antigos</option>
-          <option value="name_asc">Nome A–Z</option>
-          <option value="name_desc">Nome Z–A</option>
-          <option value="projectValue_desc">Maior valor</option>
-          <option value="projectValue_asc">Menor valor</option>
-          <option value="endDate_asc">Entrega próxima</option>
-        </select>
+        <button onClick={() => setShowAdvanced(v => !v)}
+          style={{ padding:"7px 12px", borderRadius:7, fontSize:11, cursor:"pointer", fontFamily:"inherit",
+            border:"1px solid rgba(255,255,255,.1)", background: showAdvanced ? "rgba(79,110,247,.15)" : "transparent",
+            color: showAdvanced ? "#4f6ef7" : "#8892a4" }}>
+          Filtros {showAdvanced ? "▲" : "▼"}
+        </button>
         <button onClick={openCreate}
           style={{ display:"flex", alignItems:"center", gap:6, padding:"7px 14px", borderRadius:7,
             background:"#4f6ef7", border:"none", color:"#fff", fontSize:12, fontWeight:500,
@@ -678,30 +1148,81 @@ function ClientsView({ clients, setClients, addToast }) {
         </button>
       </div>
 
-      {/* Filter chips */}
-      <div style={{ display:"flex", gap:6, marginBottom:14, flexWrap:"wrap", alignItems:"center" }}>
+      {/* Basic filter chips */}
+      <div style={{ display:"flex", gap:6, marginBottom: showAdvanced ? 8 : 14, flexWrap:"wrap", alignItems:"center" }}>
         <span style={{ fontSize:10, color:"#5a6478", fontFamily:"monospace" }}>PAGAMENTO:</span>
         {[["all","Todos"],["pendente","Pendente"],["pago","Pago"],["atrasado","Atrasado"]].map(([v,l]) => (
-          <button key={v} style={chipStyle(filterPayment===v)} onClick={() => setFilterPayment(v)}>{l}</button>
+          <button key={v} style={chipStyle(filterPayment===v)} onClick={() => { setFilterPayment(v); setPage(1) }}>{l}</button>
         ))}
         <span style={{ fontSize:10, color:"#5a6478", fontFamily:"monospace", marginLeft:8 }}>PROJETO:</span>
         {[["all","Todos"],["andamento","Em andamento"],["concluido","Concluído"],["cancelado","Cancelado"]].map(([v,l]) => (
-          <button key={v} style={chipStyle(filterProject===v)} onClick={() => setFilterProject(v)}>{l}</button>
+          <button key={v} style={chipStyle(filterProject===v)} onClick={() => { setFilterProject(v); setPage(1) }}>{l}</button>
         ))}
         {hasFilters && (
-          <button onClick={() => { setQuery(""); setFilterPayment("all"); setFilterProject("all") }}
-            style={{ ...chipStyle(false), borderColor:"rgba(239,68,68,.3)", color:"#ef4444", marginLeft:8 }}>
+          <button onClick={() => {
+            setRawQuery(""); setFilterPayment("all"); setFilterProject("all")
+            setFilterOwner("all"); setFilterTag("all"); setValueMin(""); setValueMax(""); setPage(1)
+          }} style={{ ...chipStyle(false), borderColor:"rgba(239,68,68,.3)", color:"#ef4444", marginLeft:8 }}>
             ✕ Limpar filtros
           </button>
         )}
       </div>
 
+      {/* Advanced filters */}
+      <AnimatePresence>
+        {showAdvanced && (
+          <motion.div initial={{ height:0, opacity:0 }} animate={{ height:"auto", opacity:1 }}
+            exit={{ height:0, opacity:0 }} transition={{ duration:.18 }}
+            style={{ overflow:"hidden", marginBottom:14 }}>
+            <div style={{ background:"#111520", border:"1px solid rgba(255,255,255,.06)", borderRadius:10,
+              padding:"14px 16px", display:"grid", gridTemplateColumns:"repeat(4,1fr)", gap:12 }}>
+              {/* Responsável */}
+              <div>
+                <div style={{ fontSize:9, color:"#5a6478", fontFamily:"monospace", textTransform:"uppercase",
+                  letterSpacing:".5px", marginBottom:6 }}>Responsável</div>
+                <select value={filterOwner} onChange={e => { setFilterOwner(e.target.value); setPage(1) }}
+                  style={{ ...inputStyle, cursor:"pointer" }}>
+                  <option value="all">Todos</option>
+                  {allOwners.map(o => <option key={o} value={o}>{o}</option>)}
+                </select>
+              </div>
+              {/* Tag */}
+              <div>
+                <div style={{ fontSize:9, color:"#5a6478", fontFamily:"monospace", textTransform:"uppercase",
+                  letterSpacing:".5px", marginBottom:6 }}>Tag</div>
+                <select value={filterTag} onChange={e => { setFilterTag(e.target.value); setPage(1) }}
+                  style={{ ...inputStyle, cursor:"pointer" }}>
+                  <option value="all">Todas</option>
+                  {allTags.map(t => <option key={t} value={t}>{t}</option>)}
+                </select>
+              </div>
+              {/* Valor mínimo */}
+              <div>
+                <div style={{ fontSize:9, color:"#5a6478", fontFamily:"monospace", textTransform:"uppercase",
+                  letterSpacing:".5px", marginBottom:6 }}>Valor mínimo (R$)</div>
+                <input type="number" min="0" value={valueMin}
+                  onChange={e => { setValueMin(e.target.value); setPage(1) }}
+                  placeholder="0" style={inputStyle}/>
+              </div>
+              {/* Valor máximo */}
+              <div>
+                <div style={{ fontSize:9, color:"#5a6478", fontFamily:"monospace", textTransform:"uppercase",
+                  letterSpacing:".5px", marginBottom:6 }}>Valor máximo (R$)</div>
+                <input type="number" min="0" value={valueMax}
+                  onChange={e => { setValueMax(e.target.value); setPage(1) }}
+                  placeholder="∞" style={inputStyle}/>
+              </div>
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
       {/* Form modal */}
       <AnimatePresence>
         {showForm && (
           <div style={{ position:"fixed", inset:0, background:"rgba(0,0,0,.6)", zIndex:1000,
-            display:"flex", alignItems:"center", justifyContent:"center", padding:20, backdropFilter:"blur(4px)" }}
-            onClick={closeForm}>
+            display:"flex", alignItems:"center", justifyContent:"center", padding:20,
+            backdropFilter:"blur(4px)" }} onClick={closeForm}>
             <motion.div initial={{ scale:.93, opacity:0, y:10 }} animate={{ scale:1, opacity:1, y:0 }}
               exit={{ scale:.93, opacity:0 }} transition={{ duration:.18 }}
               onClick={e => e.stopPropagation()}
@@ -717,17 +1238,13 @@ function ClientsView({ clients, setClients, addToast }) {
                   display:"flex", alignItems:"center", justifyContent:"center", fontSize:18 }}>×</button>
               </div>
               <form onSubmit={handleSave} noValidate style={{ padding:"20px 24px 24px" }}>
-
-                {/* ID (somente edição) */}
                 {editingId && (
                   <div style={{ marginBottom:14, padding:"8px 12px", background:"#161b2a",
                     borderRadius:7, border:"1px solid rgba(255,255,255,.07)" }}>
-                    <span style={{ fontSize:9, color:"#5a6478", fontFamily:"monospace", textTransform:"uppercase", letterSpacing:".5px" }}>ID DO CLIENTE: </span>
+                    <span style={{ fontSize:9, color:"#5a6478", fontFamily:"monospace", textTransform:"uppercase", letterSpacing:".5px" }}>ID: </span>
                     <span style={{ fontSize:11, color:"#5a6478", fontFamily:"monospace" }}>{editingId}</span>
                   </div>
                 )}
-
-                {/* Dados do contato */}
                 <div style={{ fontSize:9, color:"#5a6478", textTransform:"uppercase", letterSpacing:".7px",
                   fontFamily:"monospace", marginBottom:10, paddingBottom:8, borderBottom:"1px solid rgba(255,255,255,.06)" }}>
                   Dados do contato
@@ -747,8 +1264,6 @@ function ClientsView({ clients, setClients, addToast }) {
                     </div>
                   ))}
                 </div>
-
-                {/* Dados do projeto */}
                 <div style={{ fontSize:9, color:"#5a6478", textTransform:"uppercase", letterSpacing:".7px",
                   fontFamily:"monospace", marginBottom:10, paddingBottom:8, borderBottom:"1px solid rgba(255,255,255,.06)" }}>
                   Dados do projeto
@@ -793,12 +1308,11 @@ function ClientsView({ clients, setClients, addToast }) {
                   </div>
                   <div>
                     <div style={{ fontSize:9, color:"#5a6478", fontFamily:"monospace", textTransform:"uppercase", letterSpacing:".5px", marginBottom:5 }}>
-                      Progresso (%) <span style={{ color:"#3a4255" }}>— ajuste manual</span>
+                      Progresso (%) <span style={{ color:"#3a4255" }}>— manual</span>
                     </div>
                     <input type="number" min="0" max="100" value={form.projectProgress ?? ""}
                       onChange={e => setF("projectProgress", e.target.value)}
-                      placeholder="0–100"
-                      style={inputStyle}/>
+                      placeholder="0–100" style={inputStyle}/>
                     {form.projectProgress !== undefined && (
                       <div style={{ marginTop:6, height:4, background:"#1c2236", borderRadius:4, overflow:"hidden" }}>
                         <div style={{ height:"100%", borderRadius:4,
@@ -825,7 +1339,6 @@ function ClientsView({ clients, setClients, addToast }) {
                       placeholder="Detalhes…" style={inputStyle}/>
                   </div>
                 </div>
-
                 <div style={{ display:"flex", gap:8, justifyContent:"flex-end",
                   paddingTop:16, borderTop:"1px solid rgba(255,255,255,.06)" }}>
                   <button type="button" onClick={closeForm} disabled={saving}
@@ -882,31 +1395,43 @@ function ClientsView({ clients, setClients, addToast }) {
         <table style={{ width:"100%", borderCollapse:"collapse" }}>
           <thead>
             <tr>
-              {["ID","Nome","Empresa","Email","Pagamento","Projeto","Valor","Entrega",""].map(h => (
-                <th key={h} style={{ padding:"10px 14px", textAlign:"left", fontSize:9, fontWeight:600,
-                  textTransform:"uppercase", letterSpacing:".8px", color:"#5a6478", fontFamily:"monospace",
-                  borderBottom:"1px solid rgba(255,255,255,.05)" }}>{h}</th>
-              ))}
+              <th style={{ padding:"10px 14px", textAlign:"left", fontSize:9, fontWeight:600,
+                textTransform:"uppercase", letterSpacing:".8px", color:"#5a6478", fontFamily:"monospace",
+                borderBottom:"1px solid rgba(255,255,255,.05)" }}>ID</th>
+              <SortTh label="Nome"     field="name"         sortBy={sortBy} onSort={toggleSort}/>
+              <SortTh label="Empresa"  field="company"      sortBy={sortBy} onSort={toggleSort}/>
+              <th style={{ padding:"10px 14px", textAlign:"left", fontSize:9, fontWeight:600,
+                textTransform:"uppercase", letterSpacing:".8px", color:"#5a6478", fontFamily:"monospace",
+                borderBottom:"1px solid rgba(255,255,255,.05)" }}>Email</th>
+              <th style={{ padding:"10px 14px", textAlign:"left", fontSize:9, fontWeight:600,
+                textTransform:"uppercase", letterSpacing:".8px", color:"#5a6478", fontFamily:"monospace",
+                borderBottom:"1px solid rgba(255,255,255,.05)" }}>Pagamento</th>
+              <th style={{ padding:"10px 14px", textAlign:"left", fontSize:9, fontWeight:600,
+                textTransform:"uppercase", letterSpacing:".8px", color:"#5a6478", fontFamily:"monospace",
+                borderBottom:"1px solid rgba(255,255,255,.05)" }}>Projeto</th>
+              <SortTh label="Valor"    field="projectValue" sortBy={sortBy} onSort={toggleSort}/>
+              <SortTh label="Entrega"  field="endDate"      sortBy={sortBy} onSort={toggleSort}/>
+              <th style={{ padding:"10px 14px", borderBottom:"1px solid rgba(255,255,255,.05)" }}/>
             </tr>
           </thead>
           <tbody>
-            {filtered.length === 0
+            {paginated.length === 0
               ? <tr><td colSpan={9} style={{ padding:"48px 0", textAlign:"center", color:"#5a6478", fontSize:13 }}>
                   {hasFilters ? "Nenhum resultado para os filtros aplicados" : "Nenhum cliente ainda"}
                 </td></tr>
-              : filtered.map((c) => {
+              : paginated.map(c => {
                 const pal = avatarColor(c.name)
                 const ps  = PAYMENT_STATUS[c.paymentStatus ?? "pendente"]
                 const prs = PROJECT_STATUS[c.projectStatus ?? "andamento"]
                 return (
                   <tr key={c.id}
-                    style={{ borderBottom:"1px solid rgba(255,255,255,.03)", transition:"background .12s" }}
-                    onMouseEnter={e => e.currentTarget.style.background = "#161b2a"}
-                    onMouseLeave={e => e.currentTarget.style.background = "transparent"}>
-                    {/* ID */}
+                    style={{ borderBottom:"1px solid rgba(255,255,255,.03)", transition:"background .12s", cursor:"pointer" }}
+                    onClick={() => openClientModal(c)}
+                    onMouseEnter={e => e.currentTarget.style.background="#161b2a"}
+                    onMouseLeave={e => e.currentTarget.style.background="transparent"}>
                     <td style={{ padding:"11px 14px" }}>
                       <span style={{ fontSize:9, fontFamily:"monospace", color:"#5a6478", letterSpacing:".2px" }}>
-                        {c.id}
+                        <Highlight text={c.id} term={rawQuery}/>
                       </span>
                     </td>
                     <td style={{ padding:"11px 14px" }}>
@@ -914,20 +1439,37 @@ function ClientsView({ clients, setClients, addToast }) {
                         <div style={{ width:28, height:28, borderRadius:7, background:pal.bg, color:pal.fg,
                           display:"flex", alignItems:"center", justifyContent:"center",
                           fontSize:9, fontWeight:700, flexShrink:0 }}>{initials(c.name)}</div>
-                        <span style={{ fontSize:12, fontWeight:500, color:"#e8eaf0" }}>{c.name}</span>
+                        <div>
+                          <div style={{ fontSize:12, fontWeight:500, color:"#e8eaf0" }}>
+                            <Highlight text={c.name} term={rawQuery}/>
+                          </div>
+                          {(c.tags||[]).length > 0 && (
+                            <div style={{ display:"flex", gap:3, marginTop:2, flexWrap:"wrap" }}>
+                              {c.tags.map(t => <TagPill key={t} label={t}/>)}
+                            </div>
+                          )}
+                        </div>
                       </div>
                     </td>
-                    <td style={{ padding:"11px 14px", fontSize:12, color:"#8892a4" }}>{c.company||"—"}</td>
-                    <td style={{ padding:"11px 14px", fontSize:11, color:"#5a6478", fontFamily:"monospace" }}>{c.email}</td>
-                    <td style={{ padding:"11px 14px" }}><Badge colorKey={ps.badge} label={ps.label}/></td>
-                    <td style={{ padding:"11px 14px" }}><Badge colorKey={prs.badge} label={prs.label}/></td>
+                    <td style={{ padding:"11px 14px", fontSize:12, color:"#8892a4" }}>
+                      <Highlight text={c.company||"—"} term={rawQuery}/>
+                    </td>
+                    <td style={{ padding:"11px 14px", fontSize:11, color:"#5a6478", fontFamily:"monospace" }}>
+                      <Highlight text={c.email} term={rawQuery}/>
+                    </td>
+                    <td style={{ padding:"11px 14px" }} onClick={e => e.stopPropagation()}>
+                      <Badge colorKey={ps.badge} label={ps.label}/>
+                    </td>
+                    <td style={{ padding:"11px 14px" }} onClick={e => e.stopPropagation()}>
+                      <Badge colorKey={prs.badge} label={prs.label}/>
+                    </td>
                     <td style={{ padding:"11px 14px", fontSize:12, color:"#22c97d", fontFamily:"monospace", fontWeight:600 }}>
                       {formatCurrency(c.projectValue)}
                     </td>
                     <td style={{ padding:"11px 14px", fontSize:11, color:"#5a6478", fontFamily:"monospace" }}>
                       {formatDate(c.endDate)}
                     </td>
-                    <td style={{ padding:"11px 14px" }}>
+                    <td style={{ padding:"11px 14px" }} onClick={e => e.stopPropagation()}>
                       <div style={{ display:"flex", gap:6 }}>
                         <button onClick={() => openEdit(c)} title="Editar"
                           style={{ width:28, height:28, borderRadius:6, background:"rgba(79,110,247,.1)",
@@ -949,131 +1491,125 @@ function ClientsView({ clients, setClients, addToast }) {
             }
           </tbody>
         </table>
+        <Pagination total={filtered.length} page={page} perPage={perPage} onPage={p => { setPage(p); window.scrollTo(0,0) }} onPerPage={setPerPage}/>
       </div>
     </div>
   )
 }
 
-// ── Projects ───────────────────────────────────────────────────────
-// Consome clients — projetos são integrados aos clientes
-function ProjectsView({ clients }) {
-  const [filterStatus, setFilterStatus] = useState("all")
-  const [query, setQuery] = useState("")
+// ── Kanban de Projetos ─────────────────────────────────────────────
+function KanbanView({ clients, setClients, addToast }) {
+  const [draggingId, setDraggingId] = useState(null)
+  const [overCol,    setOverCol]    = useState(null)
 
-  const filtered = useMemo(() => {
-    const q = normalize(query)
-    return clients.filter(c => {
-      if (filterStatus !== "all" && (c.projectStatus || "andamento") !== filterStatus) return false
-      if (q) {
-        const haystack = normalize(`${c.projectName||""} ${c.name} ${c.projectOwner||""}`)
-        if (!haystack.includes(q)) return false
-      }
-      return true
-    })
-  }, [clients, filterStatus, query])
-
-  const chipStyle = active => ({
-    padding:"4px 10px", borderRadius:20, fontSize:11, cursor:"pointer", border:"1px solid",
-    fontFamily:"inherit", transition:"all .13s",
-    borderColor: active ? "#4f6ef7" : "rgba(255,255,255,.1)",
-    background:  active ? "#4f6ef7" : "transparent",
-    color:       active ? "#fff"    : "#8892a4",
-  })
-
-  // Stats de projetos
-  const activeCount    = useMemo(() => clients.filter(c => c.projectStatus === "andamento").length, [clients])
-  const completedCount = useMemo(() => clients.filter(c => c.projectStatus === "concluido").length, [clients])
-  const canceledCount  = useMemo(() => clients.filter(c => c.projectStatus === "cancelado").length, [clients])
-  const avgProgress    = useMemo(() => {
-    if (!clients.length) return 0
-    return Math.round(clients.reduce((s,c) => s + (c.projectProgress || 0), 0) / clients.length)
-  }, [clients])
+  function onDragStart(id) { setDraggingId(id) }
+  function onDragOver(e, col) { e.preventDefault(); setOverCol(col) }
+  function onDrop(targetCol) {
+    setOverCol(null)
+    if (!draggingId) return
+    const client = clients.find(c => c.id === draggingId)
+    if (!client || client.kanbanCol === targetCol) { setDraggingId(null); return }
+    const newActivity = {
+      id:`a${Date.now()}`, type:"status",
+      text:`Movido para "${KANBAN_COLS[targetCol].label}"`,
+      date: new Date().toISOString().split("T")[0], user:"Admin",
+    }
+    const updated = clients.map(c =>
+      c.id === draggingId
+        ? { ...c, kanbanCol: targetCol, activities: [...(c.activities||[]), newActivity] }
+        : c
+    )
+    setClients(updated); persist(STORAGE_KEYS.clients, updated)
+    addToast(`"${client.projectName}" → ${KANBAN_COLS[targetCol].label}`, "success")
+    setDraggingId(null)
+  }
 
   return (
     <div>
-      {/* Stats */}
-      <div style={{ display:"grid", gridTemplateColumns:"repeat(4,1fr)", gap:12, marginBottom:20 }}>
-        <StatCard label="Em andamento" value={activeCount}    iconColor="blue"/>
-        <StatCard label="Concluídos"   value={completedCount} iconColor="green"/>
-        <StatCard label="Cancelados"   value={canceledCount}  iconColor="gray"/>
-        <StatCard label="Progresso médio" value={`${avgProgress}%`} iconColor="purple"/>
-      </div>
-
-      {/* Toolbar */}
-      <div style={{ display:"flex", gap:8, marginBottom:12, alignItems:"center", flexWrap:"wrap" }}>
-        <div style={{ display:"flex", alignItems:"center", gap:8, background:"#161b2a",
-          border:"1px solid rgba(255,255,255,.08)", borderRadius:7, padding:"6px 10px", flex:1, minWidth:180 }}>
-          <Icon d="M21 21l-4.35-4.35M17 11A6 6 0 1 1 5 11a6 6 0 0 1 12 0z" size={13}/>
-          <input value={query} onChange={e => setQuery(e.target.value)}
-            placeholder="Buscar projeto, cliente, responsável…"
-            style={{ background:"none", border:"none", outline:"none", fontSize:12,
-              color:"#e8eaf0", fontFamily:"inherit", width:"100%" }}/>
-          {query && <button onClick={() => setQuery("")}
-            style={{ background:"none", border:"none", cursor:"pointer", color:"#5a6478", fontSize:16, lineHeight:1 }}>×</button>}
-        </div>
-        <span style={{ fontSize:10, color:"#5a6478", fontFamily:"monospace" }}>STATUS:</span>
-        {[["all","Todos"],["andamento","Em andamento"],["concluido","Concluído"],["cancelado","Cancelado"]].map(([v,l]) => (
-          <button key={v} style={chipStyle(filterStatus===v)} onClick={() => setFilterStatus(v)}>{l}</button>
-        ))}
-      </div>
-
-      <div style={{ background:"#111520", border:"1px solid rgba(255,255,255,.06)", borderRadius:12, overflow:"hidden" }}>
-        <table style={{ width:"100%", borderCollapse:"collapse" }}>
-          <thead><tr>
-            {["Projeto","Cliente","Status","Prazo","Responsável","Progresso"].map(h => (
-              <th key={h} style={{ padding:"10px 16px", textAlign:"left", fontSize:9, fontWeight:600,
-                textTransform:"uppercase", letterSpacing:".8px", color:"#5a6478", fontFamily:"monospace",
-                borderBottom:"1px solid rgba(255,255,255,.05)" }}>{h}</th>
-            ))}
-          </tr></thead>
-          <tbody>
-            {filtered.length === 0
-              ? <tr><td colSpan={6} style={{ padding:"48px 0", textAlign:"center", color:"#5a6478", fontSize:13 }}>
-                  Nenhum projeto encontrado
-                </td></tr>
-              : filtered.map(c => {
-                const st       = PROJECT_STATUS[c.projectStatus ?? "andamento"]
-                const progress = c.projectProgress ?? PROGRESS_BY_STATUS[c.projectStatus ?? "andamento"] ?? 0
-                const barColor = progressBarColor(c.projectStatus)
-                return (
-                  <tr key={c.id} style={{ borderBottom:"1px solid rgba(255,255,255,.03)" }}
-                    onMouseEnter={e => e.currentTarget.style.background = "#161b2a"}
-                    onMouseLeave={e => e.currentTarget.style.background = "transparent"}>
-                    <td style={{ padding:"11px 16px", fontSize:12, fontWeight:500, color:"#e8eaf0" }}>
-                      {c.projectName || "—"}
-                    </td>
-                    <td style={{ padding:"11px 16px" }}>
-                      <div style={{ display:"flex", alignItems:"center", gap:7 }}>
-                        <div style={{ width:22, height:22, borderRadius:5, flexShrink:0,
-                          background:avatarColor(c.name).bg, color:avatarColor(c.name).fg,
-                          display:"flex", alignItems:"center", justifyContent:"center", fontSize:8, fontWeight:700 }}>
-                          {initials(c.name)}
+      <div style={{ display:"grid", gridTemplateColumns:"repeat(4,1fr)", gap:10 }}>
+        {KANBAN_COL_KEYS.map(colKey => {
+          const col     = KANBAN_COLS[colKey]
+          const colItems = clients.filter(c => (c.kanbanCol || "backlog") === colKey)
+          const isOver   = overCol === colKey
+          return (
+            <div key={colKey}
+              onDragOver={e => onDragOver(e, colKey)}
+              onDragLeave={() => setOverCol(null)}
+              onDrop={() => onDrop(colKey)}
+              style={{ background: isOver ? col.color+"12" : "#111520",
+                border:`1px solid ${isOver ? col.color+"50" : "rgba(255,255,255,.06)"}`,
+                borderRadius:12, padding:12, minHeight:200, transition:"all .15s" }}>
+              {/* Col header */}
+              <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", marginBottom:12 }}>
+                <div style={{ display:"flex", alignItems:"center", gap:7 }}>
+                  <div style={{ width:8, height:8, borderRadius:"50%", background:col.color }}/>
+                  <span style={{ fontSize:11, fontWeight:600, color:col.color, fontFamily:"monospace",
+                    textTransform:"uppercase", letterSpacing:".4px" }}>{col.label}</span>
+                </div>
+                <span style={{ fontSize:9, padding:"1px 6px", borderRadius:4,
+                  background:col.color+"18", color:col.color, fontFamily:"monospace" }}>{colItems.length}</span>
+              </div>
+              <AnimatePresence>
+                {colItems.map(c => {
+                  const pal      = avatarColor(c.name)
+                  const barColor = progressBarColor(c.projectStatus)
+                  const ps       = PAYMENT_STATUS[c.paymentStatus] ?? PAYMENT_STATUS.pendente
+                  return (
+                    <motion.div key={c.id} layout
+                      initial={{ opacity:0, y:-4 }} animate={{ opacity:1, y:0 }} exit={{ opacity:0, scale:.95 }}
+                      draggable onDragStart={() => onDragStart(c.id)}
+                      style={{ background:"#161b2a", border:"1px solid rgba(255,255,255,.07)",
+                        borderRadius:10, padding:10, marginBottom:8, cursor:"grab",
+                        opacity: draggingId === c.id ? .4 : 1, transition:"opacity .1s" }}>
+                      {/* Card header */}
+                      <div style={{ display:"flex", alignItems:"center", gap:8, marginBottom:8 }}>
+                        <div style={{ width:24, height:24, borderRadius:6, background:pal.bg, color:pal.fg,
+                          display:"flex", alignItems:"center", justifyContent:"center",
+                          fontSize:8, fontWeight:700, flexShrink:0 }}>{initials(c.name)}</div>
+                        <div style={{ flex:1, minWidth:0 }}>
+                          <div style={{ fontSize:11, fontWeight:500, color:"#e8eaf0",
+                            overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>{c.projectName}</div>
+                          <div style={{ fontSize:9, color:"#5a6478" }}>{c.name}</div>
                         </div>
-                        <span style={{ fontSize:12, color:"#8892a4" }}>{c.name}</span>
                       </div>
-                    </td>
-                    <td style={{ padding:"11px 16px" }}><Badge colorKey={st.badge} label={st.label}/></td>
-                    <td style={{ padding:"11px 16px", fontSize:11, color:"#5a6478", fontFamily:"monospace" }}>
-                      {formatDate(c.endDate)}
-                    </td>
-                    <td style={{ padding:"11px 16px", fontSize:12, color:"#8892a4" }}>
-                      {c.projectOwner || "—"}
-                    </td>
-                    <td style={{ padding:"11px 16px" }}>
-                      <div style={{ display:"flex", alignItems:"center", gap:8 }}>
-                        <div style={{ width:80, background:"#1c2236", borderRadius:4, height:5, overflow:"hidden" }}>
-                          <div style={{ background:barColor, height:"100%",
-                            width:`${progress}%`, borderRadius:4, transition:"width .4s" }}/>
+                      {/* Progress */}
+                      <div style={{ height:3, background:"#1c2236", borderRadius:4, overflow:"hidden", marginBottom:8 }}>
+                        <div style={{ height:"100%", background:barColor, borderRadius:4,
+                          width:`${c.projectProgress||0}%`, transition:"width .4s" }}/>
+                      </div>
+                      {/* Footer */}
+                      <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between" }}>
+                        <Badge colorKey={ps.badge} label={ps.label}/>
+                        <div style={{ display:"flex", alignItems:"center", gap:5 }}>
+                          <span style={{ fontSize:9, color:"#5a6478", fontFamily:"monospace" }}>{c.projectProgress||0}%</span>
+                          <span style={{ fontSize:9, color:"#22c97d", fontFamily:"monospace", fontWeight:600 }}>
+                            {formatCurrency(c.projectValue)}
+                          </span>
                         </div>
-                        <span style={{ fontSize:9, color:"#5a6478", fontFamily:"monospace" }}>{progress}%</span>
                       </div>
-                    </td>
-                  </tr>
-                )
-              })
-            }
-          </tbody>
-        </table>
+                      {/* Responsável */}
+                      <div style={{ marginTop:6, fontSize:9, color:"#5a6478", fontFamily:"monospace" }}>
+                        ◎ {c.projectOwner || "—"} · {formatDate(c.endDate)}
+                      </div>
+                      {/* Tags */}
+                      {(c.tags||[]).length > 0 && (
+                        <div style={{ display:"flex", gap:3, marginTop:6, flexWrap:"wrap" }}>
+                          {c.tags.map(t => <TagPill key={t} label={t}/>)}
+                        </div>
+                      )}
+                    </motion.div>
+                  )
+                })}
+              </AnimatePresence>
+              {colItems.length === 0 && (
+                <div style={{ textAlign:"center", color:"#3a4255", fontSize:11, padding:"24px 0",
+                  border:"1px dashed rgba(255,255,255,.05)", borderRadius:8 }}>
+                  Arraste um card aqui
+                </div>
+              )}
+            </div>
+          )
+        })}
       </div>
     </div>
   )
@@ -1085,9 +1621,8 @@ function TasksView({ tasks, setTasks, addToast }) {
   const done    = useMemo(() => tasks.filter(t =>  t.done), [tasks])
 
   function toggle(id) {
-    const updated = tasks.map(t => t.id === id ? { ...t, done: !t.done } : t)
-    setTasks(updated)
-    persist(STORAGE_KEYS.tasks, updated)
+    const updated = tasks.map(t => t.id === id ? { ...t, done:!t.done } : t)
+    setTasks(updated); persist(STORAGE_KEYS.tasks, updated)
     const task = tasks.find(t => t.id === id)
     if (task) addToast(task.done ? "Tarefa reaberta." : "Tarefa concluída! ✓", "success")
   }
@@ -1101,8 +1636,8 @@ function TasksView({ tasks, setTasks, addToast }) {
         style={{ display:"flex", alignItems:"center", gap:10, padding:"9px 12px",
           borderRadius:8, border:"1px solid rgba(255,255,255,.06)", marginBottom:6,
           background:"#111520", cursor:"pointer", transition:"border-color .12s" }}
-        onMouseEnter={e => e.currentTarget.style.borderColor = "rgba(255,255,255,.12)"}
-        onMouseLeave={e => e.currentTarget.style.borderColor = "rgba(255,255,255,.06)"}>
+        onMouseEnter={e => e.currentTarget.style.borderColor="rgba(255,255,255,.12)"}
+        onMouseLeave={e => e.currentTarget.style.borderColor="rgba(255,255,255,.06)"}>
         <div style={{ width:16, height:16, borderRadius:4, flexShrink:0,
           border: task.done ? "none" : "1.5px solid rgba(255,255,255,.2)",
           background: task.done ? "#22c97d" : "transparent",
@@ -1114,7 +1649,7 @@ function TasksView({ tasks, setTasks, addToast }) {
             textDecoration: task.done ? "line-through" : "none" }}>{task.text}</div>
           <div style={{ fontSize:9, color:"#5a6478", fontFamily:"monospace", marginTop:3 }}>{task.client}</div>
         </div>
-        <Badge colorKey={PRIORITY_BADGE[task.priority] ?? "gray"} label={PRIORITY_LABEL[task.priority] ?? task.priority}/>
+        <Badge colorKey={PRIORITY_BADGE[task.priority]??"gray"} label={PRIORITY_LABEL[task.priority]??task.priority}/>
       </div>
     )
   }
@@ -1141,19 +1676,12 @@ function TasksView({ tasks, setTasks, addToast }) {
 
 // ── Finance ────────────────────────────────────────────────────────
 function FinanceView({ clients }) {
-  const paidValue    = useMemo(() => clients.filter(c => c.paymentStatus==="pago").reduce((s,c) => s + c.projectValue, 0), [clients])
-  const pendingValue = useMemo(() => clients.filter(c => c.paymentStatus==="pendente").reduce((s,c) => s + c.projectValue, 0), [clients])
-  const overdueValue = useMemo(() => clients.filter(c => c.paymentStatus==="atrasado").reduce((s,c) => s + c.projectValue, 0), [clients])
+  const paidValue    = useMemo(() => clients.filter(c=>c.paymentStatus==="pago").reduce((s,c)=>s+c.projectValue,0),[clients])
+  const pendingValue = useMemo(() => clients.filter(c=>c.paymentStatus==="pendente").reduce((s,c)=>s+c.projectValue,0),[clients])
+  const overdueValue = useMemo(() => clients.filter(c=>c.paymentStatus==="atrasado").reduce((s,c)=>s+c.projectValue,0),[clients])
   const totalValue   = paidValue + pendingValue + overdueValue
-
-  const recentPaid = useMemo(() =>
-    [...clients]
-      .filter(c => c.paymentStatus === "pago")
-      .sort((a,b) => (b.endDate||"").localeCompare(a.endDate||""))
-      .slice(0,5),
-    [clients]
-  )
-
+  const recentPaid   = useMemo(() =>
+    [...clients].filter(c=>c.paymentStatus==="pago").sort((a,b)=>(b.endDate||"").localeCompare(a.endDate||"")).slice(0,5),[clients])
   return (
     <div>
       <div style={{ display:"grid", gridTemplateColumns:"repeat(3,1fr)", gap:12, marginBottom:20 }}>
@@ -1192,8 +1720,8 @@ function FinanceView({ clients }) {
           ].map((r,i) => (
             <div key={r.label} style={{ display:"flex", alignItems:"center", justifyContent:"space-between",
               padding:"9px 0", borderBottom: i<4 ? "1px solid rgba(255,255,255,.04)" : "none" }}>
-              <span style={{ fontSize: r.bold?13:11, color: r.bold?"#e8eaf0":"#8892a4", fontWeight: r.bold?600:400 }}>{r.label}</span>
-              <span style={{ fontSize: r.bold?15:13, fontWeight: r.bold?700:600, fontFamily:"monospace", color:r.color }}>{r.value}</span>
+              <span style={{ fontSize:r.bold?13:11, color:r.bold?"#e8eaf0":"#8892a4", fontWeight:r.bold?600:400 }}>{r.label}</span>
+              <span style={{ fontSize:r.bold?15:13, fontWeight:r.bold?700:600, fontFamily:"monospace", color:r.color }}>{r.value}</span>
             </div>
           ))}
         </Card>
@@ -1204,10 +1732,9 @@ function FinanceView({ clients }) {
 
 // ── Reports ────────────────────────────────────────────────────────
 function ReportsView({ clients, deals }) {
-  const wonDeals  = useMemo(() => deals.filter(d => d.stage==="fechado"), [deals])
+  const wonDeals  = useMemo(()=>deals.filter(d=>d.stage==="fechado"),[deals])
   const convRate  = deals.length > 0 ? Math.round((wonDeals.length/deals.length)*100) : 0
   const avgTicket = wonDeals.length > 0 ? wonDeals.reduce((s,d)=>s+d.value,0)/wonDeals.length : 0
-
   return (
     <div>
       <div style={{ display:"grid", gridTemplateColumns:"repeat(4,1fr)", gap:12, marginBottom:20 }}>
@@ -1217,7 +1744,7 @@ function ReportsView({ clients, deals }) {
         <StatCard label="Ticket médio"         value={formatCurrency(avgTicket)}/>
       </div>
       <Card title="Distribuição por status de pagamento">
-        {Object.entries(PAYMENT_STATUS).map(([key, s]) => {
+        {Object.entries(PAYMENT_STATUS).map(([key,s]) => {
           const count = clients.filter(c=>(c.paymentStatus||"pendente")===key).length
           const pct   = clients.length > 0 ? Math.round((count/clients.length)*100) : 0
           return (
@@ -1264,9 +1791,7 @@ function NotificationsView() {
           background: n.unread ? "rgba(79,110,247,.03)" : "transparent", cursor:"pointer" }}>
           <div style={{ position:"relative", flexShrink:0 }}>
             <div style={{ width:32, height:32, borderRadius:8, background:n.color+"18",
-              color:n.color, display:"flex", alignItems:"center", justifyContent:"center", fontSize:13 }}>
-              {n.icon}
-            </div>
+              color:n.color, display:"flex", alignItems:"center", justifyContent:"center", fontSize:13 }}>{n.icon}</div>
             {n.unread && <div style={{ position:"absolute", top:-2, right:-2, width:8, height:8,
               borderRadius:"50%", background:"#4f6ef7", border:"2px solid #111520" }}/>}
           </div>
@@ -1297,7 +1822,8 @@ function SettingsView({ user, onLogout }) {
   }
   function Section({ icon, title, children }) {
     return (
-      <div style={{ background:"#111520", border:"1px solid rgba(255,255,255,.06)", borderRadius:12, overflow:"hidden", marginBottom:12 }}>
+      <div style={{ background:"#111520", border:"1px solid rgba(255,255,255,.06)", borderRadius:12,
+        overflow:"hidden", marginBottom:12 }}>
         <div style={{ padding:"12px 16px", borderBottom:"1px solid rgba(255,255,255,.05)",
           fontSize:11, fontWeight:600, color:"#e8eaf0", display:"flex", alignItems:"center", gap:8 }}>
           <span>{icon}</span> {title}
@@ -1333,20 +1859,20 @@ function SettingsView({ user, onLogout }) {
         <Row label="Fuso horário" right={<span style={{ fontSize:11, color:"#5a6478", fontFamily:"monospace" }}>America/São_Paulo</span>}/>
       </Section>
       <Section icon="🔔" title="Notificações">
-        <Row label="Por email"         desc="Resumo diário"       right={<Toggle k="emailNotif"/>}/>
-        <Row label="Alertas de negociações" desc="Ao fechar uma negociação" right={<Toggle k="dealAlerts"/>}/>
-        <Row label="Relatório semanal" desc="Toda segunda-feira"  right={<Toggle k="weeklyReport"/>}/>
+        <Row label="Por email"              desc="Resumo diário"              right={<Toggle k="emailNotif"/>}/>
+        <Row label="Alertas de negociações" desc="Ao fechar uma negociação"   right={<Toggle k="dealAlerts"/>}/>
+        <Row label="Relatório semanal"      desc="Toda segunda-feira"         right={<Toggle k="weeklyReport"/>}/>
       </Section>
       <Section icon="🔒" title="Segurança">
-        <Row label="2FA"     desc="Autenticação em dois fatores"   right={<Toggle k="twoFactor"/>}/>
-        <Row label="Webhook" desc="Receber eventos em tempo real"  right={<Toggle k="webhook"/>}/>
+        <Row label="2FA"     desc="Autenticação em dois fatores"  right={<Toggle k="twoFactor"/>}/>
+        <Row label="Webhook" desc="Receber eventos em tempo real" right={<Toggle k="webhook"/>}/>
       </Section>
     </div>
   )
 }
 
 // ═══════════════════════════════════════════════════════════════════
-// 8. PAGE TRANSITION
+// 10. PAGE TRANSITION
 // ═══════════════════════════════════════════════════════════════════
 const pageVariants = {
   initial: { opacity:0, y:8  },
@@ -1355,19 +1881,72 @@ const pageVariants = {
 }
 
 // ═══════════════════════════════════════════════════════════════════
-// 9. APP ROOT
+// 11. APP ROOT
 // ═══════════════════════════════════════════════════════════════════
 export default function App() {
   const { user, loading:authLoading, error:authError, login, logout, setError } = useAuth()
   const { toasts, addToast, removeToast } = useToast()
-  const [activeTab, setActiveTab] = useState("dashboard")
+  const [activeTab,      setActiveTab]      = useState("dashboard")
+  const [paletteOpen,    setPaletteOpen]    = useState(false)
+  const [detailClient,   setDetailClient]   = useState(null)
 
-  // Estado centralizado — projects agora derivado de clients
   const [clients, setClients] = useState(() => loadOrSeed(STORAGE_KEYS.clients, SEED_CLIENTS))
   const [deals,   setDeals]   = useState(() => loadOrSeed(STORAGE_KEYS.deals,   SEED_DEALS))
   const [tasks,   setTasks]   = useState(() => loadOrSeed(STORAGE_KEYS.tasks,   SEED_TASKS))
 
-  // Badges dinâmicos para nav — projects count derivado de clients
+  // ── Keyboard shortcuts ─────────────────────────────────────────
+  useEffect(() => {
+    function handleKey(e) {
+      // Ctrl+K ou Cmd+K → command palette
+      if ((e.ctrlKey || e.metaKey) && e.key === "k") {
+        e.preventDefault(); setPaletteOpen(v => !v); return
+      }
+      // ESC → fechar modais
+      if (e.key === "Escape") {
+        setPaletteOpen(false); setDetailClient(null); return
+      }
+      // Atalhos de navegação (só fora de inputs)
+      if (["INPUT","TEXTAREA","SELECT"].includes(document.activeElement?.tagName)) return
+      if (e.key === "1") setActiveTab("dashboard")
+      if (e.key === "2") setActiveTab("pipeline")
+      if (e.key === "3") setActiveTab("clients")
+      if (e.key === "4") setActiveTab("kanban")
+      if (e.key === "5") setActiveTab("tasks")
+    }
+    window.addEventListener("keydown", handleKey)
+    return () => window.removeEventListener("keydown", handleKey)
+  }, [])
+
+  // ── addActivity helper ─────────────────────────────────────────
+  function addActivity(clientId) {
+    const text = window.prompt("Descreva a atividade:")
+    if (!text) return
+    const newAct = { id:`a${Date.now()}`, type:"note", text, date:new Date().toISOString().split("T")[0], user:"Admin" }
+    const updated = clients.map(c =>
+      c.id === clientId ? { ...c, activities:[...(c.activities||[]), newAct] } : c
+    )
+    setClients(updated); persist(STORAGE_KEYS.clients, updated)
+    // Atualiza o cliente aberto no modal
+    setDetailClient(prev => prev?.id === clientId
+      ? { ...prev, activities:[...(prev.activities||[]), newAct] }
+      : prev
+    )
+    addToast("Atividade registrada.", "success")
+  }
+
+  // ── openClientModal ────────────────────────────────────────────
+  function openClientModal(c) { setDetailClient(c) }
+
+  // ── openEditFromModal ──────────────────────────────────────────
+  function openEditFromModal(c) {
+    setDetailClient(null)
+    setActiveTab("clients")
+    // Pequeno delay para o modal fechar antes de abrir o form
+    setTimeout(() => {
+      window.dispatchEvent(new CustomEvent("crm:editClient", { detail: c }))
+    }, 100)
+  }
+
   const badgeCounts = useMemo(() => ({
     clients:      clients.length,
     deals:        deals.filter(d => d.stage !== "fechado").length,
@@ -1389,6 +1968,31 @@ export default function App() {
   return (
     <div style={{ display:"flex", height:"100vh", background:"#0a0d14", overflow:"hidden", fontFamily:"'DM Sans',sans-serif" }}>
 
+      {/* Command Palette */}
+      <AnimatePresence>
+        {paletteOpen && (
+          <CommandPalette
+            open={paletteOpen}
+            onClose={() => setPaletteOpen(false)}
+            clients={clients}
+            setActiveTab={setActiveTab}
+            openClientModal={openClientModal}
+          />
+        )}
+      </AnimatePresence>
+
+      {/* Client Detail Modal */}
+      <AnimatePresence>
+        {detailClient && (
+          <ClientDetailModal
+            client={detailClient}
+            onClose={() => setDetailClient(null)}
+            onEdit={openEditFromModal}
+            onAddActivity={addActivity}
+          />
+        )}
+      </AnimatePresence>
+
       {/* SIDEBAR */}
       <aside style={{ width:220, minWidth:220, background:"#111520",
         borderRight:"1px solid rgba(255,255,255,.06)", display:"flex",
@@ -1396,7 +2000,21 @@ export default function App() {
 
         <div style={{ padding:"0 20px 24px", borderBottom:"1px solid rgba(255,255,255,.06)", marginBottom:16 }}>
           <div style={{ fontSize:16, fontWeight:600, color:"#e8eaf0", letterSpacing:"-.3px" }}>Decillion</div>
-          <div style={{ fontSize:10, color:"#3a4255", marginTop:2, fontFamily:"monospace", textTransform:"uppercase", letterSpacing:".8px" }}>Manager v2.0</div>
+          <div style={{ fontSize:10, color:"#3a4255", marginTop:2, fontFamily:"monospace",
+            textTransform:"uppercase", letterSpacing:".8px" }}>Manager v3.0</div>
+        </div>
+
+        {/* Search shortcut */}
+        <div style={{ padding:"0 12px", marginBottom:8 }}>
+          <button onClick={() => setPaletteOpen(true)}
+            style={{ width:"100%", display:"flex", alignItems:"center", gap:8, padding:"7px 10px",
+              borderRadius:8, background:"#161b2a", border:"1px solid rgba(255,255,255,.07)",
+              cursor:"pointer", color:"#5a6478", fontSize:11, fontFamily:"inherit" }}>
+            <Icon d="M21 21l-4.35-4.35M17 11A6 6 0 1 1 5 11a6 6 0 0 1 12 0z" size={12}/>
+            <span style={{ flex:1, textAlign:"left" }}>Buscar…</span>
+            <span style={{ fontSize:9, fontFamily:"monospace", background:"#1c2236",
+              border:"1px solid rgba(255,255,255,.07)", padding:"1px 5px", borderRadius:3 }}>⌘K</span>
+          </button>
         </div>
 
         {NAV_SECTIONS.map(section => (
@@ -1431,6 +2049,19 @@ export default function App() {
           </div>
         ))}
 
+        {/* Keyboard shortcuts hint */}
+        <div style={{ padding:"0 12px", marginTop:8 }}>
+          <div style={{ fontSize:9, color:"#3a4255", fontFamily:"monospace", lineHeight:1.8, padding:"8px 10px",
+            background:"#0d1018", borderRadius:8, border:"1px solid rgba(255,255,255,.04)" }}>
+            {[["1","Dashboard"],["2","Pipeline"],["3","Clientes"],["4","Kanban"],["5","Tarefas"]].map(([k,l]) => (
+              <div key={k} style={{ display:"flex", justifyContent:"space-between" }}>
+                <span style={{ color:"#5a6478" }}>{l}</span>
+                <span style={{ background:"#161b2a", padding:"0 4px", borderRadius:3 }}>{k}</span>
+              </div>
+            ))}
+          </div>
+        </div>
+
         <div style={{ marginTop:"auto", padding:"16px 12px 0", borderTop:"1px solid rgba(255,255,255,.05)" }}>
           <div style={{ display:"flex", alignItems:"center", gap:10, padding:"8px 10px",
             borderRadius:8, background:"#161b2a", border:"1px solid rgba(255,255,255,.06)", marginBottom:6 }}>
@@ -1443,9 +2074,8 @@ export default function App() {
             <div style={{ flex:1, minWidth:0 }}>
               <div style={{ fontSize:12, fontWeight:500, color:"#e8eaf0", overflow:"hidden",
                 textOverflow:"ellipsis", whiteSpace:"nowrap" }}>{user.name ?? "Admin"}</div>
-              <div style={{ fontSize:9, color:"#3a4255", fontFamily:"monospace",
-                textTransform:"uppercase", letterSpacing:".5px", overflow:"hidden",
-                textOverflow:"ellipsis", whiteSpace:"nowrap" }}>{user.email}</div>
+              <div style={{ fontSize:9, color:"#3a4255", fontFamily:"monospace", textTransform:"uppercase",
+                letterSpacing:".5px", overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>{user.email}</div>
             </div>
           </div>
           <button onClick={logout}
@@ -1469,9 +2099,14 @@ export default function App() {
             <div style={{ fontSize:11, color:"#5a6478", marginTop:1 }}>{meta.sub}</div>
           </div>
           <div style={{ marginLeft:"auto", display:"flex", alignItems:"center", gap:8 }}>
-            <button style={{ padding:"6px 12px", borderRadius:7, fontSize:12, cursor:"pointer",
-              fontFamily:"inherit", border:"1px solid rgba(255,255,255,.08)", background:"#161b2a", color:"#8892a4" }}>
-              Exportar
+            <button onClick={() => setPaletteOpen(true)}
+              style={{ display:"flex", alignItems:"center", gap:6, padding:"6px 12px", borderRadius:7,
+                fontSize:12, cursor:"pointer", fontFamily:"inherit",
+                border:"1px solid rgba(255,255,255,.08)", background:"#161b2a", color:"#8892a4" }}>
+              <Icon d="M21 21l-4.35-4.35M17 11A6 6 0 1 1 5 11a6 6 0 0 1 12 0z" size={12}/>
+              Buscar
+              <span style={{ fontSize:9, fontFamily:"monospace", background:"#1c2236",
+                border:"1px solid rgba(255,255,255,.07)", padding:"1px 4px", borderRadius:3 }}>⌘K</span>
             </button>
             <button onClick={() => setActiveTab("clients")}
               style={{ padding:"6px 14px", borderRadius:7, fontSize:12, fontWeight:500,
@@ -1486,8 +2121,8 @@ export default function App() {
             <motion.div key={activeTab} variants={pageVariants} initial="initial" animate="animate" exit="exit">
               {activeTab==="dashboard"     && <DashboardView     clients={clients} deals={deals}/>}
               {activeTab==="pipeline"      && <PipelineView      deals={deals} setDeals={setDeals} addToast={addToast}/>}
-              {activeTab==="clients"       && <ClientsView       clients={clients} setClients={setClients} addToast={addToast}/>}
-              {activeTab==="projects"      && <ProjectsView      clients={clients}/>}
+              {activeTab==="clients"       && <ClientsView       clients={clients} setClients={setClients} addToast={addToast} openClientModal={openClientModal}/>}
+              {activeTab==="kanban"        && <KanbanView        clients={clients} setClients={setClients} addToast={addToast}/>}
               {activeTab==="tasks"         && <TasksView         tasks={tasks} setTasks={setTasks} addToast={addToast}/>}
               {activeTab==="finance"       && <FinanceView       clients={clients}/>}
               {activeTab==="reports"       && <ReportsView       clients={clients} deals={deals}/>}
