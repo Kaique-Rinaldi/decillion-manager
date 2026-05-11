@@ -5,7 +5,7 @@ import { useAuth }    from './hooks/useAuth'
 import { useClients } from './hooks/useClients'
 import { useToast }   from './hooks/useToast'
 
-import LoginPage   from './components/auth/LoginPage'
+import LoginPage   from './components/shared/auth/LoginPage'
 import Sidebar     from './components/layout/Sidebar'
 import Dashboard   from './components/dashboard/Dashboard'
 import ClientsPage from './components/clients/ClientsPage'
