@@ -1,80 +1,79 @@
-// ─── FORMATTERS ───────────────────────────────────────────────────────────────
-
-export function formatCurrency(value) {
-  return new Intl.NumberFormat('pt-BR', {
-    style: 'currency', currency: 'BRL',
-  }).format(Number(value) || 0)
+// ─── TEXT ─────────────────────────────────────────────────────────────────────
+export function normalize(str = '') {
+  return str.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().trim()
 }
 
-export function formatDate(dateStr) {
-  if (!dateStr) return '—'
-  const [year, month, day] = dateStr.split('-')
-  return `${day}/${month}/${year}`
-}
-
-export function formatPhone(phone) {
-  return phone || '—'
-}
-
-export function initials(name) {
-  if (!name) return '??'
+export function initials(name = '') {
   return name.trim().split(' ').map(w => w[0]).slice(0, 2).join('').toUpperCase()
 }
 
-// ─── DATE HELPERS ─────────────────────────────────────────────────────────────
-
-export function isOverdue(endDate) {
-  if (!endDate) return false
-  return new Date(endDate) < new Date() 
+// ─── FORMATTING ───────────────────────────────────────────────────────────────
+export function formatCurrency(value) {
+  return new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(Number(value) || 0)
 }
 
-export function daysLeft(endDate) {
-  if (!endDate) return null
-  const diff = new Date(endDate) - new Date()
-  return Math.ceil(diff / (1000 * 60 * 60 * 24))
+export function formatDate(iso) {
+  if (!iso) return '—'
+  const [y, m, d] = iso.split('-')
+  return `${d}/${m}/${y}`
 }
 
-// ─── AVATAR PALETTE ───────────────────────────────────────────────────────────
+export function relativeTime(iso) {
+  if (!iso) return ''
+  const diff = Date.now() - new Date(iso).getTime()
+  const days = Math.floor(diff / 86400000)
+  if (days === 0) return 'hoje'
+  if (days === 1) return 'ontem'
+  if (days < 30)  return `há ${days} dias`
+  if (days < 365) return `há ${Math.floor(days / 30)} meses`
+  return `há ${Math.floor(days / 365)} anos`
+}
 
-const PALETTES = [
-  { bg: '#dbeafe', color: '#1e40af' },
-  { bg: '#dcfce7', color: '#166534' },
-  { bg: '#fef3c7', color: '#92400e' },
-  { bg: '#ede9fe', color: '#5b21b6' },
-  { bg: '#fee2e2', color: '#991b1b' },
-  { bg: '#fce7f3', color: '#9d174d' },
-  { bg: '#ecfdf5', color: '#065f46' },
-  { bg: '#fff7ed', color: '#9a3412' },
+// ─── COLORS ───────────────────────────────────────────────────────────────────
+const AVATAR_PALETTE = [
+  { bg: 'rgba(79,110,247,.15)',  fg: '#4f6ef7' },
+  { bg: 'rgba(167,139,250,.15)', fg: '#a78bfa' },
+  { bg: 'rgba(34,201,125,.15)',  fg: '#22c97d' },
+  { bg: 'rgba(245,158,11,.15)',  fg: '#f59e0b' },
+  { bg: 'rgba(236,72,153,.15)',  fg: '#ec4899' },
 ]
 
-export function avatarPalette(name) {
-  if (!name) return PALETTES[0]
-  const idx = name.charCodeAt(0) % PALETTES.length
-  return PALETTES[idx]
+export function avatarColor(name = '') {
+  const idx = (name.charCodeAt(0) || 0) % AVATAR_PALETTE.length
+  return AVATAR_PALETTE[idx]
+}
+
+export function progressBarColor(status) {
+  if (status === 'concluido') return '#22c97d'
+  if (status === 'cancelado') return '#ef4444'
+  return '#4f6ef7'
+}
+
+// ─── SEARCH ───────────────────────────────────────────────────────────────────
+export function buildHaystack(c) {
+  return normalize([
+    c.id, c.name, c.email, c.company, c.phone,
+    c.projectName, c.projectOwner,
+    c.projectStatus, c.paymentStatus,
+    c.projectValue, c.notes,
+    ...(c.tags ?? []),
+  ].filter(Boolean).join(' '))
 }
 
 // ─── VALIDATION ───────────────────────────────────────────────────────────────
-
-export function validateClientForm(data) {
+export function validateClientForm(form) {
   const errors = {}
-
-  if (!data.name?.trim()) errors.name = 'Nome é obrigatório'
-  if (!data.email?.trim()) {
-    errors.email = 'Email é obrigatório'
-  } else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(data.email)) {
-    errors.email = 'Email inválido'
-  }
-  if (!data.phone?.trim()) errors.phone = 'Telefone é obrigatório'
-  if (!data.projectValue || Number(data.projectValue) <= 0) {
-    errors.projectValue = 'Valor deve ser maior que zero'
-  }
-  if (!data.paymentStatus) errors.paymentStatus = 'Selecione o status de pagamento'
-  if (!data.projectStatus) errors.projectStatus = 'Selecione o status do projeto'
-  if (!data.startDate) errors.startDate = 'Data de início é obrigatória'
-  if (!data.endDate) errors.endDate = 'Data final é obrigatória'
-  if (data.startDate && data.endDate && data.endDate < data.startDate) {
-    errors.endDate = 'Data final deve ser após o início'
-  }
-
+  if (!form.name?.trim())        errors.name         = 'Nome obrigatório'
+  if (!form.email?.trim())       errors.email        = 'Email obrigatório'
+  else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(form.email)) errors.email = 'Email inválido'
+  if (!form.phone?.trim())       errors.phone        = 'Telefone obrigatório'
+  if (!form.projectValue || Number(form.projectValue) <= 0) errors.projectValue = 'Valor deve ser > 0'
+  if (!form.paymentStatus)       errors.paymentStatus = 'Selecione'
+  if (!form.projectStatus)       errors.projectStatus = 'Selecione'
+  if (!form.startDate)           errors.startDate    = 'Data obrigatória'
+  if (!form.endDate)             errors.endDate      = 'Data obrigatória'
+  if (form.startDate && form.endDate && form.endDate < form.startDate) errors.endDate = 'Deve ser após o início'
+  if (!form.projectName?.trim()) errors.projectName  = 'Nome do projeto obrigatório'
+  if (!form.projectOwner?.trim()) errors.projectOwner = 'Responsável obrigatório'
   return { errors, isValid: Object.keys(errors).length === 0 }
 }

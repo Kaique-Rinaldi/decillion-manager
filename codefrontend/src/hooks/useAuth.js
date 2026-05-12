@@ -1,58 +1,64 @@
-import { useState, useEffect } from 'react'
-import { ADMIN_CREDENTIALS } from '../data/mockData'
+import { useState, useEffect, useCallback } from 'react'
+import { supabase } from '../lib/supabase'
 
-const AUTH_KEY = 'dcl_auth'
-
-// ─── useAuth ──────────────────────────────────────────────────────────────────
-// Gerencia autenticação com persistência em localStorage.
-// Em um sistema real, substituir por chamadas JWT/API.
 export function useAuth() {
-  const [user, setUser] = useState(() => {
-    try {
-      const stored = localStorage.getItem(AUTH_KEY)
-      return stored ? JSON.parse(stored) : null
-    } catch {
-      return null
-    }
-  })
+  const [user,    setUser]    = useState(null)
+  const [loading, setLoading] = useState(true)
+  const [error,   setError]   = useState('')
 
-  const [loading, setLoading] = useState(false)
-  const [error, setError] = useState('')
+  useEffect(() => {
+    supabase.auth.getSession().then(({ data: { session } }) => {
+      setUser(session?.user ?? null)
+      setLoading(false)
+    })
 
-  function login(email, password) {
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
+      setUser(session?.user ?? null)
+      setLoading(false)
+    })
+
+    return () => subscription.unsubscribe()
+  }, [])
+
+  const login = useCallback(async (email, password) => {
     setLoading(true)
     setError('')
+    try {
+      const { data, error: err } = await supabase.auth.signInWithPassword({ email, password })
+      if (err) throw err
+      setUser(data.user)
+      return { success: true }
+    } catch (err) {
+      const msg = err.message || 'Erro ao fazer login.'
+      setError(msg)
+      return { success: false, error: msg }
+    } finally {
+      setLoading(false)
+    }
+  }, [])
 
-    // Simula latência de API (remove ao integrar backend real)
-    return new Promise((resolve) => {
-      setTimeout(() => {
-        if (
-          email.trim().toLowerCase() === ADMIN_CREDENTIALS.email &&
-          password === ADMIN_CREDENTIALS.password
-        ) {
-          const userData = {
-            email: ADMIN_CREDENTIALS.email,
-            name: 'Admin',
-            role: 'admin',
-            loginAt: new Date().toISOString(),
-          }
-          localStorage.setItem(AUTH_KEY, JSON.stringify(userData))
-          setUser(userData)
-          setLoading(false)
-          resolve({ ok: true })
-        } else {
-          setError('Email ou senha incorretos.')
-          setLoading(false)
-          resolve({ ok: false })
-        }
-      }, 600)
-    })
-  }
+  const register = useCallback(async (email, password) => {
+    setLoading(true)
+    setError('')
+    try {
+      const { data, error: err } = await supabase.auth.signUp({ email, password })
+      if (err) throw err
+      return { success: true, user: data.user, needsConfirmation: !data.session }
+    } catch (err) {
+      const msg = err.message || 'Erro ao criar conta.'
+      setError(msg)
+      return { success: false, error: msg }
+    } finally {
+      setLoading(false)
+    }
+  }, [])
 
-  function logout() {
-    localStorage.removeItem(AUTH_KEY)
+  const logout = useCallback(async () => {
+    setLoading(true)
+    await supabase.auth.signOut()
     setUser(null)
-  }
+    setLoading(false)
+  }, [])
 
-  return { user, loading, error, login, logout, setError }
+  return { user, loading, error, login, register, logout, setError }
 }

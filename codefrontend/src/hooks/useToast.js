@@ -1,17 +1,17 @@
 import { useState, useCallback } from 'react'
 
-// ─── useToast ─────────────────────────────────────────────────────────────────
-// Sistema de notificações toast.
-// Tipos: 'success' | 'error' | 'warning'
+let toastId = 0
+
 export function useToast() {
   const [toasts, setToasts] = useState([])
 
-  const addToast = useCallback((message, type = 'success', duration = 3000) => {
-    const id = Date.now() + Math.random()
+  const addToast = useCallback((message, type = 'info', duration = 3500) => {
+    const id = ++toastId
     setToasts(prev => [...prev, { id, message, type }])
     setTimeout(() => {
       setToasts(prev => prev.filter(t => t.id !== id))
     }, duration)
+    return id
   }, [])
 
   const removeToast = useCallback((id) => {
