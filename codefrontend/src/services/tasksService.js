@@ -1,8 +1,8 @@
 import { supabase } from "../lib/supabase"
 
-/* =========================
-   FETCH
-========================= */
+// status no banco: "pending" | "done"
+// (ajuste os valores abaixo se usar outros, ex: "completed", "finished")
+
 export async function fetchTasks(userId) {
   if (!userId) return []
 
@@ -13,23 +13,20 @@ export async function fetchTasks(userId) {
     .order("created_at", { ascending: false })
 
   if (error) {
-    console.error(error)
+    console.error("fetchTasks error:", error)
     return []
   }
 
   return (data ?? []).map(dbToTask)
 }
 
-/* =========================
-   CREATE
-========================= */
-export async function createTask(userId, text) {
+export async function createTask(userId, title) {
   const { data, error } = await supabase
     .from("tasks")
     .insert({
       user_id: userId,
-      text,
-      done: false
+      title,
+      status: "pending",
     })
     .select()
     .single()
@@ -39,13 +36,21 @@ export async function createTask(userId, text) {
   return dbToTask(data)
 }
 
-/* =========================
-   UPDATE
-========================= */
 export async function updateTask(id, updates) {
+  // Converte { done: true/false } → { status: "done"/"pending" }
+  const payload = { ...updates }
+  if ("done" in payload) {
+    payload.status = payload.done ? "done" : "pending"
+    delete payload.done
+  }
+  if ("text" in payload) {
+    payload.title = payload.text
+    delete payload.text
+  }
+
   const { data, error } = await supabase
     .from("tasks")
-    .update(updates)
+    .update(payload)
     .eq("id", id)
     .select()
     .single()
@@ -55,9 +60,6 @@ export async function updateTask(id, updates) {
   return dbToTask(data)
 }
 
-/* =========================
-   DELETE
-========================= */
 export async function deleteTask(id) {
   const { error } = await supabase
     .from("tasks")
@@ -67,14 +69,12 @@ export async function deleteTask(id) {
   if (error) throw error
 }
 
-/* =========================
-   MAPPER
-========================= */
 function dbToTask(row) {
   return {
-    id: row.id,
-    text: row.text,
-    done: row.done,
-    createdAt: row.created_at
+    id:          row.id,
+    text:        row.title || row.description || "",
+    description: row.description || "",
+    done:        row.status === "done",
+    createdAt:   row.created_at,
   }
 }
