@@ -6,11 +6,8 @@ import { useDataLoader } from "./hooks/useDataLoader"
 import LoginPage      from "./components/shared/LoginPage"
 import ToastContainer from "./components/shared/Toast"
 import FinancePage    from "./components/pages/FinancePage"
-<<<<<<< HEAD
-=======
 import KanbanPage     from "./components/pages/KanbanPage"
 import TasksPage      from "./components/pages/TasksPage"
->>>>>>> 65d44e8 (kanban+tasks)
 
 import {
   fetchClients, createClient, updateClient, deleteClient,
