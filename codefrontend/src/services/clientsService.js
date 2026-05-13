@@ -1,125 +1,130 @@
-import { supabase } from '../lib/supabase'
+import { supabase } from "../lib/supabase"
 
-/* =========================
-   CREATE CLIENT (FINAL)
-========================= */
-export async function createClient(clientData) {
-  const { data: { user } } = await supabase.auth.getUser()
+/**
+ * FETCH CLIENTS
+ */
+export async function fetchClients(userId) {
+  if (!userId) return []
 
-  if (!user) throw new Error("User not authenticated")
+  const { data, error } = await supabase
+    .from("clients")
+    .select("*")
+    .eq("user_id", userId)
+    .order("created_at", { ascending: false })
+
+  if (error) {
+    console.error("fetchClients error:", error)
+    return []
+  }
+
+  return (data ?? []).map(dbToClient)
+}
+
+/**
+ * CREATE CLIENT
+ */
+export async function createClient(userId, clientData) {
+  if (!userId) throw new Error("Missing userId")
 
   const payload = {
-    user_id: user.id,
-    name: clientData.name,
-    company: clientData.company || null,
-    email: clientData.email || null,
-    phone: clientData.phone || null,
-    project_name: clientData.projectName || null,
-    project_owner: clientData.projectOwner || null,
-    project_value: Number(clientData.projectValue) || 0,
-    payment_status: clientData.paymentStatus || 'pendente',
-    project_status: clientData.projectStatus || 'andamento',
-    project_progress: Number(clientData.projectProgress) || 0,
-    start_date: clientData.startDate || null,
-    end_date: clientData.endDate || null,
-    notes: clientData.notes || null,
-    kanban_col: clientData.kanbanCol || 'backlog',
-    tags: clientData.tags || []
+    user_id: userId,
+    name: clientData?.name || "",
+    company: clientData?.company || "",
+    email: clientData?.email || "",
+    phone: clientData?.phone || "",
+    project_name: clientData?.projectName || "",
+    project_owner: clientData?.projectOwner || "",
+    project_value: Number(clientData?.projectValue || 0),
+    payment_status: clientData?.paymentStatus || "pendente",
+    project_status: clientData?.projectStatus || "andamento",
+    project_progress: Number(clientData?.projectProgress || 0),
+    start_date: clientData?.startDate || null,
+    end_date: clientData?.endDate || null,
+    notes: clientData?.notes || "",
+    kanban_col: clientData?.kanbanCol || "backlog",
+    tags: clientData?.tags || []
   }
 
   const { data, error } = await supabase
-    .from('clients')
+    .from("clients")
     .insert(payload)
     .select()
     .single()
 
-  if (error) throw error
+  if (error) {
+    console.error("createClient error:", error)
+    throw error
+  }
+
   return dbToClient(data)
 }
 
-/* =========================
-   UPDATE CLIENT (FINAL)
-========================= */
+/**
+ * UPDATE CLIENT
+ */
 export async function updateClient(clientId, clientData) {
+  if (!clientId) return null
+
   const payload = {}
 
-  if (clientData.name !== undefined) payload.name = clientData.name
-  if (clientData.company !== undefined) payload.company = clientData.company
-  if (clientData.email !== undefined) payload.email = clientData.email
-  if (clientData.phone !== undefined) payload.phone = clientData.phone
-  if (clientData.projectName !== undefined) payload.project_name = clientData.projectName
-  if (clientData.projectOwner !== undefined) payload.project_owner = clientData.projectOwner
-  if (clientData.projectValue !== undefined) payload.project_value = Number(clientData.projectValue)
-  if (clientData.paymentStatus !== undefined) payload.payment_status = clientData.paymentStatus
-  if (clientData.projectStatus !== undefined) payload.project_status = clientData.projectStatus
-  if (clientData.projectProgress !== undefined) payload.project_progress = Number(clientData.projectProgress)
-  if (clientData.startDate !== undefined) payload.start_date = clientData.startDate
-  if (clientData.endDate !== undefined) payload.end_date = clientData.endDate
-  if (clientData.notes !== undefined) payload.notes = clientData.notes
-  if (clientData.kanbanCol !== undefined) payload.kanban_col = clientData.kanbanCol
-  if (clientData.tags !== undefined) payload.tags = clientData.tags
+  Object.entries(clientData || {}).forEach(([key, value]) => {
+    if (value !== undefined) payload[key] = value
+  })
 
   const { data, error } = await supabase
-    .from('clients')
+    .from("clients")
     .update(payload)
-    .eq('id', clientId)
+    .eq("id", clientId)
     .select()
     .single()
 
-  if (error) throw error
+  if (error) {
+    console.error("updateClient error:", error)
+    throw error
+  }
+
   return dbToClient(data)
 }
 
-/* =========================
-   FETCH CLIENTS
-========================= */
-export async function fetchClients() {
-  const { data: { user } } = await supabase.auth.getUser()
-
-  if (!user) throw new Error("User not authenticated")
-
-  const { data, error } = await supabase
-    .from('clients')
-    .select('*')
-    .eq('user_id', user.id)
-    .order('created_at', { ascending: false })
-
-  if (error) throw error
-  return (data ?? []).map(dbToClient)
-}
-
-/* =========================
-   DELETE CLIENT
-========================= */
+/**
+ * DELETE CLIENT
+ */
 export async function deleteClient(clientId) {
-  const { error } = await supabase
-    .from('clients')
-    .delete()
-    .eq('id', clientId)
+  if (!clientId) return
 
-  if (error) throw error
+  const { error } = await supabase
+    .from("clients")
+    .delete()
+    .eq("id", clientId)
+
+  if (error) {
+    console.error("deleteClient error:", error)
+    throw error
+  }
 }
 
-/* =========================
-   MAP DB -> FRONTEND
-========================= */
-export function dbToClient(row) {
+/**
+ * NORMALIZER SAFE
+ */
+function dbToClient(row) {
+  if (!row) return null
+
   return {
     id: row.id,
-    name: row.name,
-    company: row.company,
-    email: row.email,
-    phone: row.phone,
-    projectName: row.project_name,
-    projectOwner: row.project_owner,
-    projectValue: Number(row.project_value) || 0,
-    paymentStatus: row.payment_status,
-    projectStatus: row.project_status,
-    projectProgress: Number(row.project_progress) || 0,
+    name: row.name || "",
+    company: row.company || "",
+    email: row.email || "",
+    phone: row.phone || "",
+    projectName: row.project_name || "",
+    projectOwner: row.project_owner || "",
+    projectValue: Number(row.project_value || 0),
+    paymentStatus: row.payment_status || "pendente",
+    projectStatus: row.project_status || "andamento",
+    projectProgress: Number(row.project_progress || 0),
     startDate: row.start_date,
     endDate: row.end_date,
-    notes: row.notes,
-    kanbanCol: row.kanban_col || 'backlog',
+    notes: row.notes || "",
+    kanbanCol: row.kanban_col || "backlog",
     tags: row.tags || [],
     createdAt: row.created_at
   }

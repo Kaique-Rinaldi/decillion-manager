@@ -1,10 +1,10 @@
 import { supabase } from "../lib/supabase"
 
-/* =========================
-   FETCH DEALS
-========================= */
+/**
+ * FETCH DEALS
+ */
 export async function fetchDeals(userId) {
-  if (!userId) throw new Error("Missing userId")
+  if (!userId) return []
 
   const { data, error } = await supabase
     .from("deals")
@@ -12,28 +12,29 @@ export async function fetchDeals(userId) {
     .eq("user_id", userId)
     .order("created_at", { ascending: false })
 
-  if (error) throw error
+  if (error) {
+    console.error("fetchDeals error:", error)
+    return []
+  }
 
   return (data ?? []).map(dbToDeal)
 }
 
-/* =========================
-   CREATE DEAL
-========================= */
+/**
+ * CREATE DEAL
+ */
 export async function createDeal(userId, dealData) {
   if (!userId) throw new Error("Missing userId")
 
   const payload = {
     user_id: userId,
-    client_id: dealData.clientId || null,
-    name: dealData.name || "",
-    company: dealData.company || "",
-    value: Number(dealData.value) || 0,
-    stage: dealData.stage || "lead",
-    closed_at: dealData.closedAt || null,
+    client_id: dealData?.clientId || null,
+    name: dealData?.name || "",
+    company: dealData?.company || "",
+    value: Number(dealData?.value || 0),
+    stage: dealData?.stage || "lead",
+    closed_at: dealData?.closedAt || null
   }
-
-  console.log("CREATE DEAL:", payload)
 
   const { data, error } = await supabase
     .from("deals")
@@ -41,24 +42,25 @@ export async function createDeal(userId, dealData) {
     .select()
     .single()
 
-  if (error) throw error
+  if (error) {
+    console.error("createDeal error:", error)
+    throw error
+  }
 
   return dbToDeal(data)
 }
 
-/* =========================
-   UPDATE DEAL
-========================= */
+/**
+ * UPDATE DEAL
+ */
 export async function updateDeal(dealId, dealData) {
-  if (!dealId) throw new Error("Missing dealId")
+  if (!dealId) return null
 
   const payload = {}
 
-  if (dealData.name !== undefined) payload.name = dealData.name
-  if (dealData.company !== undefined) payload.company = dealData.company
-  if (dealData.value !== undefined) payload.value = Number(dealData.value)
-  if (dealData.stage !== undefined) payload.stage = dealData.stage
-  if (dealData.closedAt !== undefined) payload.closed_at = dealData.closedAt
+  Object.entries(dealData || {}).forEach(([key, value]) => {
+    if (value !== undefined) payload[key] = value
+  })
 
   const { data, error } = await supabase
     .from("deals")
@@ -67,29 +69,35 @@ export async function updateDeal(dealId, dealData) {
     .select()
     .single()
 
-  if (error) throw error
+  if (error) {
+    console.error("updateDeal error:", error)
+    throw error
+  }
 
   return dbToDeal(data)
 }
 
-/* =========================
-   DELETE DEAL
-========================= */
+/**
+ * DELETE DEAL
+ */
 export async function deleteDeal(dealId) {
-  if (!dealId) throw new Error("Missing dealId")
+  if (!dealId) return
 
   const { error } = await supabase
     .from("deals")
     .delete()
     .eq("id", dealId)
 
-  if (error) throw error
+  if (error) {
+    console.error("deleteDeal error:", error)
+    throw error
+  }
 }
 
-/* =========================
-   MAPPER
-========================= */
-export function dbToDeal(row) {
+/**
+ * NORMALIZER SAFE
+ */
+function dbToDeal(row) {
   if (!row) return null
 
   return {
@@ -97,9 +105,9 @@ export function dbToDeal(row) {
     clientId: row.client_id,
     name: row.name || "",
     company: row.company || "",
-    value: Number(row.value) || 0,
+    value: Number(row.value || 0),
     stage: row.stage || "lead",
     closedAt: row.closed_at,
-    createdAt: row.created_at,
+    createdAt: row.created_at
   }
 }

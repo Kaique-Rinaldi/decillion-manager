@@ -1,8 +1,5 @@
 import { useEffect, useState } from "react"
-import {
-  fetchActivitiesByClient,
-  createActivity
-} from "../services/activityService"
+import { supabase } from "../lib/supabase"
 
 export default function ClientDetails({ clientId }) {
   const [activities, setActivities] = useState([])
@@ -10,90 +7,63 @@ export default function ClientDetails({ clientId }) {
   const [description, setDescription] = useState("")
   const [loading, setLoading] = useState(false)
 
-  // ✔ proteção contra clientId undefined
-  if (!clientId) return <p>Carregando cliente...</p>
-
   useEffect(() => {
     if (!clientId) return
     loadActivities()
   }, [clientId])
 
-  // ✔ load otimizado (sem bug de estado)
   async function loadActivities() {
-    const data = await fetchActivitiesByClient(clientId)
-    setActivities(data ?? [])
+    const { data, error } = await supabase
+      .from("activities")
+      .select("*")
+      .eq("client_id", clientId)
+      .order("created_at", { ascending: false })
+
+    if (error) return
+
+    setActivities(data || [])
   }
 
   async function addActivity(e) {
     e.preventDefault()
+
+    const safeType = (type || "").trim()
+    const safeDescription = (description || "").trim()
+
+    if (!safeType || !safeDescription) return
+
     setLoading(true)
 
-    // ✔ validação obrigatória (profissional)
-    if (!type.trim() || !description.trim()) {
-      setLoading(false)
-      return
-    }
-
-    try {
-      await createActivity({
-        clientId,
-        type,
-        description
-      })
-
-      // limpa form
-      setType("")
-      setDescription("")
-
-      // atualiza lista
-      await loadActivities()
-    } catch (error) {
-      console.log(error)
-    }
+    const { error } = await supabase.from("activities").insert([
+      {
+        client_id: clientId,
+        type: safeType,
+        description: safeDescription
+      }
+    ])
 
     setLoading(false)
+
+    if (error) return
+
+    setType("")
+    setDescription("")
+    loadActivities()
   }
 
+  if (!clientId) return <p>Carregando cliente...</p>
+
   return (
-    <div style={{ padding: 20 }}>
-      <h1>Activities do Cliente</h1>
-
-      {/* FORMULÁRIO */}
-      <form onSubmit={addActivity} style={{ marginBottom: 20 }}>
-        <input
-          placeholder="Tipo (call, meeting...)"
-          value={type}
-          onChange={(e) => setType(e.target.value)}
-          required
-          style={{ display: "block", marginBottom: 10 }}
-        />
-
-        <input
-          placeholder="Descrição"
-          value={description}
-          onChange={(e) => setDescription(e.target.value)}
-          required
-          style={{ display: "block", marginBottom: 10 }}
-        />
-
-        <button type="submit" disabled={loading}>
-          {loading ? "Salvando..." : "Adicionar Activity"}
-        </button>
+    <div>
+      <form onSubmit={addActivity}>
+        <input value={type} onChange={e => setType(e.target.value)} />
+        <input value={description} onChange={e => setDescription(e.target.value)} />
+        <button disabled={loading}>Add</button>
       </form>
 
-      {/* LISTA */}
-      {activities.length === 0 && <p>Nenhuma activity ainda</p>}
-
-      {activities.map((a) => (
-        <div
-          key={a.id}
-          style={{
-            padding: 10,
-            border: "1px solid #ccc",
-            marginBottom: 10,
-          }}
-        >
-          <strong>{a.type}</strong>
+      {activities.map(a => (
+        <div key={a.id}>
+          <b>{a.type}</b>
           <p>{a.description}</p>
         </div>
       ))}

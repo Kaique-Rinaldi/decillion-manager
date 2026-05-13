@@ -1,72 +1,107 @@
-import { supabase } from '../lib/supabase'
+import { supabase } from "../lib/supabase"
 
+/* =========================
+   FETCH TASKS
+========================= */
 export async function fetchTasks(userId) {
-  const { data, error } = await supabase
-    .from('tasks')
-    .select('*')
-    .eq('user_id', userId)
-    .order('created_at', { ascending: false })
+  if (!userId) return []
 
-  if (error) throw error
+  const { data, error } = await supabase
+    .from("tasks")
+    .select("*")
+    .eq("user_id", userId)
+    .order("created_at", { ascending: false })
+
+  if (error) {
+    console.error("Tasks error:", error)
+    return []
+  }
+
   return (data ?? []).map(dbToTask)
 }
 
+/* =========================
+   CREATE TASK
+========================= */
 export async function createTask(userId, taskData) {
+  if (!userId) throw new Error("Missing userId")
+
   const payload = {
-    user_id:   userId,
-    text:      taskData.text,
-    priority:  taskData.priority || 'media',
-    done:      taskData.done ?? false,
-    client_id: taskData.clientId || null,
-    client:    taskData.client || 'Interno',
+    user_id: userId,
+    title: taskData?.title || "",
+    description: taskData?.description || "",
+    status: taskData?.status || "pendente"
   }
 
   const { data, error } = await supabase
-    .from('tasks')
+    .from("tasks")
     .insert(payload)
     .select()
     .single()
 
-  if (error) throw error
+  if (error) {
+    console.error("Create task error:", error)
+    throw error
+  }
+
   return dbToTask(data)
 }
 
+/* =========================
+   UPDATE TASK
+========================= */
 export async function updateTask(taskId, taskData) {
+  if (!taskId) return
+
   const payload = {}
-  if (taskData.text      !== undefined) payload.text      = taskData.text
-  if (taskData.priority  !== undefined) payload.priority  = taskData.priority
-  if (taskData.done      !== undefined) payload.done      = taskData.done
-  if (taskData.clientId  !== undefined) payload.client_id = taskData.clientId
-  if (taskData.client    !== undefined) payload.client    = taskData.client
+
+  if (taskData.title !== undefined) payload.title = taskData.title
+  if (taskData.description !== undefined) payload.description = taskData.description
+  if (taskData.status !== undefined) payload.status = taskData.status
 
   const { data, error } = await supabase
-    .from('tasks')
+    .from("tasks")
     .update(payload)
-    .eq('id', taskId)
+    .eq("id", taskId)
     .select()
     .single()
 
-  if (error) throw error
+  if (error) {
+    console.error("Update task error:", error)
+    throw error
+  }
+
   return dbToTask(data)
 }
 
+/* =========================
+   DELETE TASK
+========================= */
 export async function deleteTask(taskId) {
-  const { error } = await supabase
-    .from('tasks')
-    .delete()
-    .eq('id', taskId)
+  if (!taskId) return
 
-  if (error) throw error
+  const { error } = await supabase
+    .from("tasks")
+    .delete()
+    .eq("id", taskId)
+
+  if (error) {
+    console.error("Delete task error:", error)
+    throw error
+  }
 }
 
-export function dbToTask(row) {
+/* =========================
+   MAPPER
+========================= */
+function dbToTask(row) {
+  if (!row) return null
+
   return {
-    id:        row.id,
-    text:      row.text,
-    priority:  row.priority,
-    done:      row.done,
-    clientId:  row.client_id,
-    client:    row.client,
-    createdAt: row.created_at,
+    id: row.id,
+    title: row.title || "",
+    description: row.description || "",
+    status: row.status || "pendente",
+    createdAt: row.created_at
   }
 }
