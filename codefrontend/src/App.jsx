@@ -4,7 +4,7 @@ import { useAuth }  from "./hooks/useAuth"
 import { useToast } from "./hooks/useToast"
 import LoginPage      from "./components/shared/LoginPage"
 import ToastContainer from "./components/shared/Toast"
-import FinancePage    from "./pages/FinancePage"
+import FinancePage    from "./components/pages/FinancePage"
 
 import {
   fetchClients, createClient, updateClient, deleteClient,
