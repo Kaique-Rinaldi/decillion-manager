@@ -1,8 +1,44 @@
 import { supabase } from "../lib/supabase"
 
 /**
- * FETCH CLIENTS
+ * Campos somente-leitura que NUNCA devem ser enviados num UPDATE.
+ * O Supabase rejeita qualquer campo que não existe como coluna editável.
  */
+const READONLY_FIELDS = new Set(["id", "user_id", "userId", "createdAt", "created_at"])
+
+/**
+ * Converte um objeto camelCase (vindo do front) para snake_case (colunas do banco).
+ * Campos desconhecidos são ignorados silenciosamente.
+ */
+function toSnakeCase(clientData) {
+  const MAP = {
+    name:            "name",
+    company:         "company",
+    email:           "email",
+    phone:           "phone",
+    projectName:     "project_name",
+    projectOwner:    "project_owner",
+    projectValue:    "project_value",
+    paymentStatus:   "payment_status",
+    projectStatus:   "project_status",
+    projectProgress: "project_progress",
+    startDate:       "start_date",
+    endDate:         "end_date",
+    notes:           "notes",
+    kanbanCol:       "kanban_col",
+    kanban_col:      "kanban_col",   // aceita os dois formatos
+    tags:            "tags",
+  }
+
+  const payload = {}
+  for (const [key, value] of Object.entries(clientData || {})) {
+    if (READONLY_FIELDS.has(key)) continue   // ignora id, createdAt, etc.
+    const col = MAP[key]
+    if (col && value !== undefined) payload[col] = value
+  }
+  return payload
+}
+
 export async function fetchClients(userId) {
   if (!userId) return []
 
@@ -20,29 +56,12 @@ export async function fetchClients(userId) {
   return (data ?? []).map(dbToClient)
 }
 
-/**
- * CREATE CLIENT
- */
 export async function createClient(userId, clientData) {
   if (!userId) throw new Error("Missing userId")
 
   const payload = {
     user_id: userId,
-    name: clientData?.name || "",
-    company: clientData?.company || "",
-    email: clientData?.email || "",
-    phone: clientData?.phone || "",
-    project_name: clientData?.projectName || "",
-    project_owner: clientData?.projectOwner || "",
-    project_value: Number(clientData?.projectValue || 0),
-    payment_status: clientData?.paymentStatus || "pendente",
-    project_status: clientData?.projectStatus || "andamento",
-    project_progress: Number(clientData?.projectProgress || 0),
-    start_date: clientData?.startDate || null,
-    end_date: clientData?.endDate || null,
-    notes: clientData?.notes || "",
-    kanban_col: clientData?.kanbanCol || "backlog",
-    tags: clientData?.tags || []
+    ...toSnakeCase(clientData),
   }
 
   const { data, error } = await supabase
@@ -59,17 +78,15 @@ export async function createClient(userId, clientData) {
   return dbToClient(data)
 }
 
-/**
- * UPDATE CLIENT
- */
 export async function updateClient(clientId, clientData) {
   if (!clientId) return null
 
-  const payload = {}
+  const payload = toSnakeCase(clientData)
 
-  Object.entries(clientData || {}).forEach(([key, value]) => {
-    if (value !== undefined) payload[key] = value
-  })
+  if (Object.keys(payload).length === 0) {
+    console.warn("updateClient: nenhum campo válido para atualizar", clientData)
+    return null
+  }
 
   const { data, error } = await supabase
     .from("clients")
@@ -86,9 +103,6 @@ export async function updateClient(clientId, clientData) {
   return dbToClient(data)
 }
 
-/**
- * DELETE CLIENT
- */
 export async function deleteClient(clientId) {
   if (!clientId) return
 
@@ -103,29 +117,26 @@ export async function deleteClient(clientId) {
   }
 }
 
-/**
- * NORMALIZER SAFE
- */
 function dbToClient(row) {
   if (!row) return null
 
   return {
-    id: row.id,
-    name: row.name || "",
-    company: row.company || "",
-    email: row.email || "",
-    phone: row.phone || "",
-    projectName: row.project_name || "",
-    projectOwner: row.project_owner || "",
-    projectValue: Number(row.project_value || 0),
-    paymentStatus: row.payment_status || "pendente",
-    projectStatus: row.project_status || "andamento",
+    id:              row.id,
+    name:            row.name            || "",
+    company:         row.company         || "",
+    email:           row.email           || "",
+    phone:           row.phone           || "",
+    projectName:     row.project_name    || "",
+    projectOwner:    row.project_owner   || "",
+    projectValue:    Number(row.project_value    || 0),
+    paymentStatus:   row.payment_status  || "pendente",
+    projectStatus:   row.project_status  || "andamento",
     projectProgress: Number(row.project_progress || 0),
-    startDate: row.start_date,
-    endDate: row.end_date,
-    notes: row.notes || "",
-    kanbanCol: row.kanban_col || "backlog",
-    tags: row.tags || [],
-    createdAt: row.created_at
+    startDate:       row.start_date,
+    endDate:         row.end_date,
+    notes:           row.notes           || "",
+    kanbanCol:       row.kanban_col      || "backlog",
+    tags:            row.tags            || [],
+    createdAt:       row.created_at,
   }
 }
