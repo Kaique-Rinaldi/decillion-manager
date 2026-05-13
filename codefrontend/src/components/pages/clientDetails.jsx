@@ -8,9 +8,7 @@ export default function ClientDetails({ clientId }) {
   const [loading, setLoading] = useState(false)
 
   useEffect(() => {
-    if (clientId) {
-      loadActivities()
-    }
+    if (clientId) loadActivities()
   }, [clientId])
 
   async function loadActivities() {
@@ -22,66 +20,35 @@ export default function ClientDetails({ clientId }) {
     e.preventDefault()
     setLoading(true)
 
-    try {
-      await createActivity({
-        clientId,
-        type,
-        description,
-      })
+    await createActivity({
+      clientId,
+      type,
+      description
+    })
 
-      // limpa form
-      setType("")
-      setDescription("")
-
-      // atualiza lista
-      await loadActivities()
-    } catch (error) {
-      console.log(error)
-    }
+    setType("")
+    setDescription("")
+    await loadActivities()
 
     setLoading(false)
   }
 
   return (
-    <div style={{ padding: 20 }}>
-      <h1>Activities do Cliente</h1>
+    <div>
+      <h1>Activities</h1>
 
-      {/* FORMULÁRIO */}
-      <form onSubmit={addActivity} style={{ marginBottom: 20 }}>
-        <input
-          placeholder="Tipo (call, meeting...)"
-          value={type}
-          onChange={(e) => setType(e.target.value)}
-          required
-          style={{ display: "block", marginBottom: 10 }}
-        />
+      <form onSubmit={addActivity}>
+        <input value={type} onChange={(e) => setType(e.target.value)} placeholder="Tipo" />
+        <input value={description} onChange={(e) => setDescription(e.target.value)} placeholder="Descrição" />
 
-        <input
-          placeholder="Descrição"
-          value={description}
-          onChange={(e) => setDescription(e.target.value)}
-          required
-          style={{ display: "block", marginBottom: 10 }}
-        />
-
-        <button type="submit" disabled={loading}>
-          {loading ? "Salvando..." : "Adicionar Activity"}
+        <button disabled={loading}>
+          {loading ? "Salvando..." : "Adicionar"}
         </button>
       </form>
 
-      {/* LISTA */}
-      {activities.length === 0 && <p>Nenhuma activity ainda</p>}
-
       {activities.map((a) => (
-        <div
-          key={a.id}
-          style={{
-            padding: 10,
-            border: "1px solid #ccc",
-            marginBottom: 10,
-          }}
-        >
-          <strong>{a.type}</strong>
+        <div key={a.id}>
+          <b>{a.type}</b>
           <p>{a.description}</p>
         </div>
       ))}

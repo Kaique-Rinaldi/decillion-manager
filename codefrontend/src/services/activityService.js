@@ -1,6 +1,5 @@
 import { supabase } from '../lib/supabase'
 
-// 🔥 Buscar activities de um cliente
 export async function fetchActivitiesByClient(clientId) {
   const { data, error } = await supabase
     .from('activities')
@@ -12,7 +11,6 @@ export async function fetchActivitiesByClient(clientId) {
   return data || []
 }
 
-// 🔥 Criar nova activity
 export async function createActivity({ clientId, type, description }) {
   const { data, error } = await supabase
     .from('activities')
@@ -30,7 +28,6 @@ export async function createActivity({ clientId, type, description }) {
   return data
 }
 
-// 🔥 Deletar activity
 export async function deleteActivity(activityId) {
   const { error } = await supabase
     .from('activities')
