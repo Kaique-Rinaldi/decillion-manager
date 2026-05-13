@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react"
-import { supabase } from "../services/supabase"
+import { fetchActivitiesByClient, createActivity } from "../services/activityService"
 
 export default function ClientDetails({ clientId }) {
   const [activities, setActivities] = useState([])
@@ -8,21 +8,13 @@ export default function ClientDetails({ clientId }) {
   const [loading, setLoading] = useState(false)
 
   useEffect(() => {
-    loadActivities()
-  }, [])
+    if (clientId) {
+      loadActivities()
+    }
+  }, [clientId])
 
   async function loadActivities() {
-    const { data, error } = await supabase
-      .from("activities")
-      .select("*")
-      .eq("client_id", clientId)
-      .order("created_at", { ascending: false })
-
-    if (error) {
-      console.log(error)
-      return
-    }
-
+    const data = await fetchActivitiesByClient(clientId)
     setActivities(data)
   }
 
@@ -30,27 +22,24 @@ export default function ClientDetails({ clientId }) {
     e.preventDefault()
     setLoading(true)
 
-    const { error } = await supabase.from("activities").insert([
-      {
-        client_id: clientId,
+    try {
+      await createActivity({
+        clientId,
         type,
         description,
-      },
-    ])
+      })
 
-    setLoading(false)
+      // limpa form
+      setType("")
+      setDescription("")
 
-    if (error) {
+      // atualiza lista
+      await loadActivities()
+    } catch (error) {
       console.log(error)
-      return
     }
 
-    // limpa form
-    setType("")
-    setDescription("")
-
-    // atualiza lista automaticamente
-    loadActivities()
+    setLoading(false)
   }
 
   return (
