@@ -1,19 +1,15 @@
 import { supabase } from '../lib/supabase'
 
-export async function fetchClients(userId) {
-  const { data, error } = await supabase
-    .from('clients')
-    .select('*')
-    .eq('user_id', userId)
-    .order('created_at', { ascending: false })
+/* =========================
+   CREATE CLIENT (FINAL)
+========================= */
+export async function createClient(clientData) {
+  const { data: { user } } = await supabase.auth.getUser()
 
-  if (error) throw error
-  return (data ?? []).map(dbToClient)
-}
+  if (!user) throw new Error("User not authenticated")
 
-export async function createClient(userId, clientData) {
   const payload = {
-    user_id: userId,
+    user_id: user.id,
     name: clientData.name,
     company: clientData.company || null,
     email: clientData.email || null,
@@ -41,6 +37,9 @@ export async function createClient(userId, clientData) {
   return dbToClient(data)
 }
 
+/* =========================
+   UPDATE CLIENT (FINAL)
+========================= */
 export async function updateClient(clientId, clientData) {
   const payload = {}
 
@@ -71,6 +70,27 @@ export async function updateClient(clientId, clientData) {
   return dbToClient(data)
 }
 
+/* =========================
+   FETCH CLIENTS
+========================= */
+export async function fetchClients() {
+  const { data: { user } } = await supabase.auth.getUser()
+
+  if (!user) throw new Error("User not authenticated")
+
+  const { data, error } = await supabase
+    .from('clients')
+    .select('*')
+    .eq('user_id', user.id)
+    .order('created_at', { ascending: false })
+
+  if (error) throw error
+  return (data ?? []).map(dbToClient)
+}
+
+/* =========================
+   DELETE CLIENT
+========================= */
 export async function deleteClient(clientId) {
   const { error } = await supabase
     .from('clients')
@@ -80,6 +100,9 @@ export async function deleteClient(clientId) {
   if (error) throw error
 }
 
+/* =========================
+   MAP DB -> FRONTEND
+========================= */
 export function dbToClient(row) {
   return {
     id: row.id,
