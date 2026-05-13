@@ -118,10 +118,9 @@ export default function KanbanPage({ addToast }) {
       // pois é assim que a coluna está nomeada no banco.
       // Se o seu updateClient já faz essa conversão internamente, remova o kanban_col
       // e deixe apenas kanbanCol — mas ter os dois não quebra nada.
-      await updateClient(client.id, {
-        kanban_col: targetCol,  // snake_case para o Supabase
-        kanbanCol:  targetCol,  // camelCase caso updateClient prefira
-      })
+      // updateClient passa o objeto direto pro Supabase sem converter keys,
+      // então precisa do nome exato da coluna no banco: kanban_col
+      await updateClient(client.id, { kanban_col: targetCol })
       addToast?.(`Movido para "${COLS[targetCol].label}"`, "success")
     } catch (err) {
       console.error("Erro ao mover card:", err)

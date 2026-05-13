@@ -1,8 +1,7 @@
-import { useEffect, useState } from "react"
+import { useEffect, useRef, useState } from "react"
 import { supabase } from "../../lib/supabase"
 import { fetchTasks, createTask, updateTask } from "../../services/tasksService"
 
-// ─── Helpers ─────────────────────────────────────────────────────────────────
 function normalizeTask(t) {
   return {
     ...t,
@@ -16,7 +15,9 @@ export default function TasksPage() {
   const [input,   setInput]   = useState("")
   const [loading, setLoading] = useState(true)
   const [saving,  setSaving]  = useState(false)
-  const [user,    setUser]    = useState(null)
+  // useRef garante que userId está disponível imediatamente em handleCreate,
+  // sem depender do ciclo assíncrono do setState
+  const userIdRef = useRef(null)
 
   useEffect(() => { init() }, [])
 
@@ -25,7 +26,7 @@ export default function TasksPage() {
     try {
       const { data: { user } } = await supabase.auth.getUser()
       if (!user) return
-      setUser(user)
+      userIdRef.current = user.id
       const data = await fetchTasks(user.id)
       setTasks((data ?? []).map(normalizeTask))
     } catch (err) {
@@ -36,10 +37,11 @@ export default function TasksPage() {
   }
 
   async function handleCreate() {
-    if (!input.trim() || !user) return
+    const userId = userIdRef.current
+    if (!input.trim() || !userId) return
     setSaving(true)
     try {
-      const newTask = await createTask(user.id, input.trim())
+      const newTask = await createTask(userId, input.trim())
       setTasks(prev => [normalizeTask(newTask), ...prev])
       setInput("")
     } catch (err) {
@@ -53,7 +55,6 @@ export default function TasksPage() {
     const task = tasks.find(t => t.id === id)
     if (!task) return
 
-    // Optimistic update
     setTasks(prev => prev.map(t => t.id === id ? { ...t, done: !t.done } : t))
 
     try {
@@ -61,7 +62,6 @@ export default function TasksPage() {
       setTasks(prev => prev.map(t => t.id === id ? normalizeTask(updated) : t))
     } catch (err) {
       console.error("Erro ao atualizar tarefa:", err)
-      // Reverte
       setTasks(prev => prev.map(t => t.id === id ? task : t))
     }
   }
@@ -71,14 +71,13 @@ export default function TasksPage() {
 
   return (
     <div>
-      {/* Totais */}
       <div style={{
         display: "grid", gridTemplateColumns: "repeat(3,1fr)", gap: 10, marginBottom: 20,
       }}>
         {[
-          { label: "Total",      value: tasks.length,  color: "#60a5fa" },
-          { label: "Pendentes",  value: pending,        color: "#f59e0b" },
-          { label: "Concluídas", value: completed,      color: "#22c97d" },
+          { label: "Total",      value: tasks.length, color: "#60a5fa" },
+          { label: "Pendentes",  value: pending,       color: "#f59e0b" },
+          { label: "Concluídas", value: completed,     color: "#22c97d" },
         ].map(({ label, value, color }) => (
           <div key={label} style={{
             background: "#111520", border: "1px solid rgba(255,255,255,.06)",
@@ -95,10 +94,7 @@ export default function TasksPage() {
         ))}
       </div>
 
-      {/* Input para nova tarefa */}
-      <div style={{
-        display: "flex", gap: 8, marginBottom: 16,
-      }}>
+      <div style={{ display: "flex", gap: 8, marginBottom: 16 }}>
         <input
           value={input}
           onChange={e => setInput(e.target.value)}
@@ -117,8 +113,8 @@ export default function TasksPage() {
             outline: "none",
             transition: "border-color .15s",
           }}
-          onFocus={e  => e.target.style.borderColor = "rgba(96,165,250,.5)"}
-          onBlur={e   => e.target.style.borderColor = "rgba(255,255,255,.09)"}
+          onFocus={e => e.target.style.borderColor = "rgba(96,165,250,.5)"}
+          onBlur={e  => e.target.style.borderColor = "rgba(255,255,255,.09)"}
         />
         <button
           onClick={handleCreate}
@@ -141,7 +137,6 @@ export default function TasksPage() {
         </button>
       </div>
 
-      {/* Lista de tarefas */}
       {loading ? (
         [1,2,3,4].map(i => (
           <div key={i} style={{
@@ -177,7 +172,6 @@ export default function TasksPage() {
               opacity: t.done ? 0.6 : 1,
             }}
           >
-            {/* Checkbox visual */}
             <div style={{
               width: 16, height: 16, borderRadius: 4, flexShrink: 0,
               border: `1.5px solid ${t.done ? "#22c97d" : "rgba(255,255,255,.2)"}`,
@@ -192,7 +186,6 @@ export default function TasksPage() {
               )}
             </div>
 
-            {/* Texto */}
             <span style={{
               fontSize: 13,
               color: t.done ? "#4a5568" : "#c8cce0",
@@ -204,7 +197,6 @@ export default function TasksPage() {
               {t.text}
             </span>
 
-            {/* Badge status */}
             <span style={{
               fontSize: 8, fontFamily: "monospace", fontWeight: 700,
               textTransform: "uppercase", letterSpacing: ".3px",
