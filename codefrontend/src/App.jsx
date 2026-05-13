@@ -140,7 +140,11 @@ const AVATAR_PALETTE = [
   { bg:"rgba(236,72,153,.15)",  fg:"#ec4899" },
 ]
 function avatarColor(name = "") {
-  const idx = (name.charCodeAt(0) || 0) % AVATAR_PALETTE.length
+  if (!name || typeof name !== "string") {
+    return AVATAR_PALETTE[0]
+  }
+
+  const idx = name.charCodeAt(0) % AVATAR_PALETTE.length
   return AVATAR_PALETTE[idx]
 }
 function progressBarColor(status) {
