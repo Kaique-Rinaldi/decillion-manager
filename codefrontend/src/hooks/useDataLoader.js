@@ -5,20 +5,24 @@ import { fetchTasks } from "../services/tasksService"
 
 export function useDataLoader(user, setClients, setDeals, setTasks) {
   useEffect(() => {
-    if (!user) return
+    if (!user?.id) return
 
     async function load() {
-      const [c, d, t] = await Promise.all([
-        fetchClients(),
-        fetchDeals(user.id),
-        fetchTasks(user.id)
-      ])
+      try {
+        const [clients, deals, tasks] = await Promise.all([
+          fetchClients(user.id),
+          fetchDeals(user.id),
+          fetchTasks(user.id)
+        ])
 
-      setClients(c)
-      setDeals(d)
-      setTasks(t)
+        setClients(clients)
+        setDeals(deals)
+        setTasks(tasks)
+      } catch (err) {
+        console.error("Erro ao carregar dados:", err)
+      }
     }
 
     load()
-  }, [user])
+  }, [user?.id])
 }

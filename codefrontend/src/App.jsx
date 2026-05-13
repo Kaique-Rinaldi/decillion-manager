@@ -1,10 +1,16 @@
 import { useEffect, useState, useCallback, useMemo, useRef } from "react"
 import { motion, AnimatePresence } from "framer-motion"
-import { useAuth }  from "./hooks/useAuth"
-import { useToast } from "./hooks/useToast"
+import { useAuth }    from "./hooks/useAuth"
+import { useToast }   from "./hooks/useToast"
+import { useDataLoader } from "./hooks/useDataLoader"
 import LoginPage      from "./components/shared/LoginPage"
 import ToastContainer from "./components/shared/Toast"
 import FinancePage    from "./components/pages/FinancePage"
+<<<<<<< HEAD
+=======
+import KanbanPage     from "./components/pages/KanbanPage"
+import TasksPage      from "./components/pages/TasksPage"
+>>>>>>> 65d44e8 (kanban+tasks)
 
 import {
   fetchClients, createClient, updateClient, deleteClient,
@@ -13,7 +19,7 @@ import {
   fetchDeals, updateDeal,
 } from "./services/dealsService"
 import {
-  fetchTasks, updateTask,
+  updateTask,
 } from "./services/tasksService"
 
 // ═══════════════════════════════════════════════════════════════════
@@ -38,14 +44,6 @@ const PIPELINE_STAGE = {
 }
 const PIPELINE_STAGE_KEYS = ["lead","contato","proposta","negoc","fechado"]
 
-const KANBAN_COLS = {
-  backlog:   { label: "Backlog",       color: "#8892a4" },
-  andamento: { label: "Em andamento",  color: "#4f6ef7" },
-  review:    { label: "Em revisão",    color: "#f59e0b" },
-  concluido: { label: "Concluído",     color: "#22c97d" },
-}
-const KANBAN_COL_KEYS = ["backlog","andamento","review","concluido"]
-
 const PROGRESS_BY_STATUS = { andamento: 45, concluido: 100, cancelado: 0 }
 
 const ALLOWED_TRANSITIONS = {
@@ -55,19 +53,6 @@ const ALLOWED_TRANSITIONS = {
   negoc:    ["proposta","fechado"],
   fechado:  ["negoc"],
 }
-
-// Seed data for first-time users (inserted into Supabase on first load)
-const SEED_DEALS_TEMPLATE = [
-  { name:"Tech Holding",    company:"Tech Holding",   value:15000, stage:"lead",     closedAt:null,         createdAt:"2024-05-15" },
-  { name:"Grupo Omega",     company:"Grupo Omega",    value:22000, stage:"contato",  closedAt:null,         createdAt:"2024-05-10" },
-  { name:"Startup Beta",    company:"Startup Beta",   value:6200,  stage:"contato",  closedAt:null,         createdAt:"2024-05-11" },
-]
-
-const SEED_TASKS_TEMPLATE = [
-  { text:"Atualizar pipeline Q2",               priority:"baixa", done:true,  client:"Interno" },
-  { text:"Reunião de alinhamento com equipe",   priority:"media", done:true,  client:"Interno" },
-  { text:"Configurar webhook de notificações",  priority:"baixa", done:true,  client:"Interno" },
-]
 
 // ═══════════════════════════════════════════════════════════════════
 // 2. HELPERS
@@ -141,10 +126,7 @@ const AVATAR_PALETTE = [
   { bg:"rgba(236,72,153,.15)",  fg:"#ec4899" },
 ]
 function avatarColor(name = "") {
-  if (!name || typeof name !== "string") {
-    return AVATAR_PALETTE[0]
-  }
-
+  if (!name || typeof name !== "string") return AVATAR_PALETTE[0]
   const idx = name.charCodeAt(0) % AVATAR_PALETTE.length
   return AVATAR_PALETTE[idx]
 }
@@ -344,7 +326,6 @@ function Pagination({ total, page, perPage, onPage, onPerPage }) {
   )
 }
 
-// Loading skeleton
 function TableSkeleton({ rows = 5 }) {
   return (
     <>
@@ -673,7 +654,7 @@ function ClientDetailModal({ client, onClose, onEdit, onAddActivity }) {
 }
 
 // ═══════════════════════════════════════════════════════════════════
-// 7. VIEWS
+// 7. VIEWS (Dashboard, Pipeline, Clients, Reports, Notifications, Settings)
 // ═══════════════════════════════════════════════════════════════════
 
 function DashboardView({ clients, deals }) {
@@ -798,7 +779,7 @@ function DashboardView({ clients, deals }) {
   )
 }
 
-function PipelineView({ deals, setDeals, addToast, userId }) {
+function PipelineView({ deals, setDeals, addToast }) {
   const [draggingId, setDraggingId] = useState(null)
   const [overStage,  setOverStage]  = useState(null)
 
@@ -1002,7 +983,6 @@ function ClientsView({ clients, setClients, addToast, openClientModal, user, dat
     try {
       const progress = Math.min(100, Math.max(0, Number(form.projectProgress) || 0))
       const clientData = { ...form, projectValue: Number(form.projectValue), projectProgress: progress }
-
       if (editingId) {
         const updated = await updateClient(editingId, clientData)
         setClients(prev => prev.map(c => c.id === editingId ? updated : c))
@@ -1060,7 +1040,6 @@ function ClientsView({ clients, setClients, addToast, openClientModal, user, dat
 
   return (
     <div>
-      {/* Summary */}
       <div style={{ display:"flex", gap:10, marginBottom:14, flexWrap:"wrap" }}>
         {[
           { l:"Total faturado", v:formatCurrency(totalValue),   c:"#e8eaf0" },
@@ -1077,7 +1056,6 @@ function ClientsView({ clients, setClients, addToast, openClientModal, user, dat
         ))}
       </div>
 
-      {/* Toolbar */}
       <div style={{ display:"flex", gap:8, marginBottom:12, alignItems:"center", flexWrap:"wrap" }}>
         <div style={{ display:"flex", alignItems:"center", gap:8, background:"#161b2a",
           border:"1px solid rgba(255,255,255,.08)", borderRadius:7, padding:"6px 10px", flex:1, minWidth:200 }}>
@@ -1103,7 +1081,6 @@ function ClientsView({ clients, setClients, addToast, openClientModal, user, dat
         </button>
       </div>
 
-      {/* Basic filter chips */}
       <div style={{ display:"flex", gap:6, marginBottom: showAdvanced ? 8 : 14, flexWrap:"wrap", alignItems:"center" }}>
         <span style={{ fontSize:10, color:"#5a6478", fontFamily:"monospace" }}>PAGAMENTO:</span>
         {[["all","Todos"],["pendente","Pendente"],["pago","Pago"],["atrasado","Atrasado"]].map(([v,l]) => (
@@ -1123,7 +1100,6 @@ function ClientsView({ clients, setClients, addToast, openClientModal, user, dat
         )}
       </div>
 
-      {/* Advanced filters */}
       <AnimatePresence>
         {showAdvanced && (
           <motion.div initial={{ height:0, opacity:0 }} animate={{ height:"auto", opacity:1 }}
@@ -1168,7 +1144,6 @@ function ClientsView({ clients, setClients, addToast, openClientModal, user, dat
         )}
       </AnimatePresence>
 
-      {/* Form modal */}
       <AnimatePresence>
         {showForm && (
           <div style={{ position:"fixed", inset:0, background:"rgba(0,0,0,.6)", zIndex:1000,
@@ -1310,7 +1285,6 @@ function ClientsView({ clients, setClients, addToast, openClientModal, user, dat
         )}
       </AnimatePresence>
 
-      {/* Confirm delete */}
       <AnimatePresence>
         {confirmId && (
           <div style={{ position:"fixed", inset:0, background:"rgba(0,0,0,.6)", zIndex:1000,
@@ -1342,7 +1316,6 @@ function ClientsView({ clients, setClients, addToast, openClientModal, user, dat
         )}
       </AnimatePresence>
 
-      {/* Table */}
       <div style={{ background:"#111520", border:"1px solid rgba(255,255,255,.06)", borderRadius:12, overflow:"hidden" }}>
         <table style={{ width:"100%", borderCollapse:"collapse" }}>
           <thead>
@@ -1451,191 +1424,6 @@ function ClientsView({ clients, setClients, addToast, openClientModal, user, dat
     </div>
   )
 }
-
-function KanbanView({ clients, setClients, addToast }) {
-  const [draggingId, setDraggingId] = useState(null)
-  const [overCol,    setOverCol]    = useState(null)
-
-  function onDragStart(id) { setDraggingId(id) }
-  function onDragOver(e, col) { e.preventDefault(); setOverCol(col) }
-
-  async function onDrop(targetCol) {
-    setOverCol(null)
-    if (!draggingId) return
-    const client = clients.find(c => c.id === draggingId)
-    if (!client || client.kanbanCol === targetCol) { setDraggingId(null); return }
-    const newActivity = {
-      id:`a${Date.now()}`, type:"status",
-      text:`Movido para "${KANBAN_COLS[targetCol].label}"`,
-      date: new Date().toISOString().split("T")[0], user:"Sistema",
-    }
-    const updatedActivities = [...(client.activities||[]), newActivity]
-    setClients(prev => prev.map(c =>
-      c.id === draggingId ? { ...c, kanbanCol: targetCol, activities: updatedActivities } : c
-    ))
-    try {
-      await updateClient(draggingId, { kanbanCol: targetCol, activities: updatedActivities })
-      addToast(`"${client.projectName}" → ${KANBAN_COLS[targetCol].label}`, "success")
-    } catch {
-      setClients(prev => prev.map(c =>
-        c.id === draggingId ? { ...c, kanbanCol: client.kanbanCol, activities: client.activities } : c
-      ))
-      addToast("Erro ao mover card.", "error")
-    }
-    setDraggingId(null)
-  }
-
-  return (
-    <div>
-      <div style={{ display:"grid", gridTemplateColumns:"repeat(4,1fr)", gap:10 }}>
-        {KANBAN_COL_KEYS.map(colKey => {
-          const col      = KANBAN_COLS[colKey]
-          const colItems = clients.filter(c => (c.kanbanCol || "backlog") === colKey)
-          const isOver   = overCol === colKey
-          return (
-            <div key={colKey}
-              onDragOver={e => onDragOver(e, colKey)}
-              onDragLeave={() => setOverCol(null)}
-              onDrop={() => onDrop(colKey)}
-              style={{ background: isOver ? col.color+"12" : "#111520",
-                border:`1px solid ${isOver ? col.color+"50" : "rgba(255,255,255,.06)"}`,
-                borderRadius:12, padding:12, minHeight:200, transition:"all .15s" }}>
-              <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", marginBottom:12 }}>
-                <div style={{ display:"flex", alignItems:"center", gap:7 }}>
-                  <div style={{ width:8, height:8, borderRadius:"50%", background:col.color }}/>
-                  <span style={{ fontSize:11, fontWeight:600, color:col.color, fontFamily:"monospace",
-                    textTransform:"uppercase", letterSpacing:".4px" }}>{col.label}</span>
-                </div>
-                <span style={{ fontSize:9, padding:"1px 6px", borderRadius:4,
-                  background:col.color+"18", color:col.color, fontFamily:"monospace" }}>{colItems.length}</span>
-              </div>
-              <AnimatePresence>
-                {colItems.map(c => {
-                  const pal      = avatarColor(c.name)
-                  const barColor = progressBarColor(c.projectStatus)
-                  const ps       = PAYMENT_STATUS[c.paymentStatus] ?? PAYMENT_STATUS.pendente
-                  return (
-                    <motion.div key={c.id} layout
-                      initial={{ opacity:0, y:-4 }} animate={{ opacity:1, y:0 }} exit={{ opacity:0, scale:.95 }}
-                      draggable onDragStart={() => onDragStart(c.id)}
-                      style={{ background:"#161b2a", border:"1px solid rgba(255,255,255,.07)",
-                        borderRadius:10, padding:10, marginBottom:8, cursor:"grab",
-                        opacity: draggingId === c.id ? .4 : 1, transition:"opacity .1s" }}>
-                      <div style={{ display:"flex", alignItems:"center", gap:8, marginBottom:8 }}>
-                        <div style={{ width:24, height:24, borderRadius:6, background:pal.bg, color:pal.fg,
-                          display:"flex", alignItems:"center", justifyContent:"center",
-                          fontSize:8, fontWeight:700, flexShrink:0 }}>{initials(c.name)}</div>
-                        <div style={{ flex:1, minWidth:0 }}>
-                          <div style={{ fontSize:11, fontWeight:500, color:"#e8eaf0",
-                            overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>{c.projectName}</div>
-                          <div style={{ fontSize:9, color:"#5a6478" }}>{c.name}</div>
-                        </div>
-                      </div>
-                      <div style={{ height:3, background:"#1c2236", borderRadius:4, overflow:"hidden", marginBottom:8 }}>
-                        <div style={{ height:"100%", background:barColor, borderRadius:4,
-                          width:`${c.projectProgress||0}%`, transition:"width .4s" }}/>
-                      </div>
-                      <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between" }}>
-                        <Badge colorKey={ps.badge} label={ps.label}/>
-                        <div style={{ display:"flex", alignItems:"center", gap:5 }}>
-                          <span style={{ fontSize:9, color:"#5a6478", fontFamily:"monospace" }}>{c.projectProgress||0}%</span>
-                          <span style={{ fontSize:9, color:"#22c97d", fontFamily:"monospace", fontWeight:600 }}>
-                            {formatCurrency(c.projectValue)}
-                          </span>
-                        </div>
-                      </div>
-                      <div style={{ marginTop:6, fontSize:9, color:"#5a6478", fontFamily:"monospace" }}>
-                        ◎ {c.projectOwner || "—"} · {formatDate(c.endDate)}
-                      </div>
-                      {(c.tags||[]).length > 0 && (
-                        <div style={{ display:"flex", gap:3, marginTop:6, flexWrap:"wrap" }}>
-                          {c.tags.map(t => <TagPill key={t} label={t}/>)}
-                        </div>
-                      )}
-                    </motion.div>
-                  )
-                })}
-              </AnimatePresence>
-              {colItems.length === 0 && (
-                <div style={{ textAlign:"center", color:"#3a4255", fontSize:11, padding:"24px 0",
-                  border:"1px dashed rgba(255,255,255,.05)", borderRadius:8 }}>
-                  Arraste um card aqui
-                </div>
-              )}
-            </div>
-          )
-        })}
-      </div>
-    </div>
-  )
-}
-
-function TasksView({ tasks, setTasks, addToast }) {
-  const pending = useMemo(() => tasks.filter(t => !t.done), [tasks])
-  const done    = useMemo(() => tasks.filter(t =>  t.done), [tasks])
-
-  async function toggle(id) {
-    const task = tasks.find(t => t.id === id)
-    if (!task) return
-    const newDone = !task.done
-    setTasks(prev => prev.map(t => t.id === id ? { ...t, done: newDone } : t))
-    try {
-      await updateTask(id, { done: newDone })
-      addToast(newDone ? "Tarefa concluída! ✓" : "Tarefa reaberta.", "success")
-    } catch {
-      setTasks(prev => prev.map(t => t.id === id ? { ...t, done: task.done } : t))
-      addToast("Erro ao atualizar tarefa.", "error")
-    }
-  }
-
-  const PRIORITY_BADGE = { alta:"red", media:"amber", baixa:"gray" }
-  const PRIORITY_LABEL = { alta:"Alta", media:"Média", baixa:"Baixa" }
-
-  function TaskItem({ task }) {
-    return (
-      <div onClick={() => toggle(task.id)}
-        style={{ display:"flex", alignItems:"center", gap:10, padding:"9px 12px",
-          borderRadius:8, border:"1px solid rgba(255,255,255,.06)", marginBottom:6,
-          background:"#111520", cursor:"pointer", transition:"border-color .12s" }}
-        onMouseEnter={e => e.currentTarget.style.borderColor="rgba(255,255,255,.12)"}
-        onMouseLeave={e => e.currentTarget.style.borderColor="rgba(255,255,255,.06)"}>
-        <div style={{ width:16, height:16, borderRadius:4, flexShrink:0,
-          border: task.done ? "none" : "1.5px solid rgba(255,255,255,.2)",
-          background: task.done ? "#22c97d" : "transparent",
-          display:"flex", alignItems:"center", justifyContent:"center", transition:"all .15s" }}>
-          {task.done && <span style={{ color:"#fff", fontSize:10, fontWeight:700 }}>✓</span>}
-        </div>
-        <div style={{ flex:1, minWidth:0 }}>
-          <div style={{ fontSize:12, color: task.done ? "#5a6478" : "#8892a4",
-            textDecoration: task.done ? "line-through" : "none" }}>{task.text}</div>
-          <div style={{ fontSize:9, color:"#5a6478", fontFamily:"monospace", marginTop:3 }}>{task.client}</div>
-        </div>
-        <Badge colorKey={PRIORITY_BADGE[task.priority]??"gray"} label={PRIORITY_LABEL[task.priority]??task.priority}/>
-      </div>
-    )
-  }
-
-  return (
-    <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:16 }}>
-      <div>
-        <SectionLabel>Pendentes ({pending.length})</SectionLabel>
-        {pending.length === 0
-          ? <div style={{ textAlign:"center", color:"#5a6478", padding:"24px 0", fontSize:12 }}>Nenhuma tarefa pendente 🎉</div>
-          : pending.map(t => <TaskItem key={t.id} task={t}/>)
-        }
-      </div>
-      <div>
-        <SectionLabel>Concluídas ({done.length})</SectionLabel>
-        {done.length === 0
-          ? <div style={{ textAlign:"center", color:"#5a6478", padding:"24px 0", fontSize:12 }}>Nenhuma concluída ainda</div>
-          : done.map(t => <TaskItem key={t.id} task={t}/>)
-        }
-      </div>
-    </div>
-  )
-}
-
-// FinanceView removido — substituído pelo componente externo FinancePage
 
 function ReportsView({ clients, deals }) {
   const wonDeals  = useMemo(()=>deals.filter(d=>d.stage==="fechado"),[deals])
@@ -1800,35 +1588,13 @@ export default function App() {
   const [detailClient, setDetailClient] = useState(null)
   const [dataLoading,  setDataLoading]  = useState(false)
 
+  // ── Estado local (sem Zustand) ────────────────────────────────
   const [clients, setClients] = useState([])
   const [deals,   setDeals]   = useState([])
   const [tasks,   setTasks]   = useState([])
 
-  // ── Load data from Supabase when user logs in ─────────────────
-  useEffect(() => {
-    if (!user) {
-      setClients([]); setDeals([]); setTasks([])
-      return
-    }
-    async function loadAll() {
-      setDataLoading(true)
-      try {
-        const [c, d, t] = await Promise.all([
-          fetchClients(user.id),
-          fetchDeals(user.id),
-          fetchTasks(user.id),
-        ])
-        setClients(c)
-        setDeals(d)
-        setTasks(t)
-      } catch (err) {
-        addToast(`Erro ao carregar dados: ${err.message}`, "error")
-      } finally {
-        setDataLoading(false)
-      }
-    }
-    loadAll()
-  }, [user?.id])
+  // ── useDataLoader carrega tudo via Supabase ───────────────────
+  useDataLoader(user, setClients, setDeals, setTasks)
 
   // ── Keyboard shortcuts ─────────────────────────────────────────
   useEffect(() => {
@@ -2072,15 +1838,15 @@ export default function App() {
         <div style={{ flex:1, overflowY:"auto", padding:24 }}>
           <AnimatePresence mode="wait">
             <motion.div key={activeTab} variants={pageVariants} initial="initial" animate="animate" exit="exit">
-              {activeTab==="dashboard"     && <DashboardView     clients={clients} deals={deals}/>}
-              {activeTab==="pipeline"      && <PipelineView      deals={deals} setDeals={setDeals} addToast={addToast} userId={user.id}/>}
-              {activeTab==="clients"       && <ClientsView       clients={clients} setClients={setClients} addToast={addToast} openClientModal={openClientModal} user={user} dataLoading={dataLoading}/>}
-              {activeTab==="kanban"        && <KanbanView        clients={clients} setClients={setClients} addToast={addToast}/>}
-              {activeTab==="tasks"         && <TasksView         tasks={tasks} setTasks={setTasks} addToast={addToast}/>}
-              {activeTab==="finance"       && <FinancePage        clients={clients}/>}
-              {activeTab==="reports"       && <ReportsView       clients={clients} deals={deals}/>}
+              {activeTab==="dashboard"     && <DashboardView  clients={clients} deals={deals}/>}
+              {activeTab==="pipeline"      && <PipelineView   deals={deals} setDeals={setDeals} addToast={addToast}/>}
+              {activeTab==="clients"       && <ClientsView    clients={clients} setClients={setClients} addToast={addToast} openClientModal={openClientModal} user={user} dataLoading={dataLoading}/>}
+              {activeTab==="kanban"        && <KanbanPage     addToast={addToast}/>}
+              {activeTab==="tasks"         && <TasksPage/>}
+              {activeTab==="finance"       && <FinancePage    clients={clients}/>}
+              {activeTab==="reports"       && <ReportsView    clients={clients} deals={deals}/>}
               {activeTab==="notifications" && <NotificationsView/>}
-              {activeTab==="settings"      && <SettingsView      user={user} onLogout={logout}/>}
+              {activeTab==="settings"      && <SettingsView   user={user} onLogout={logout}/>}
             </motion.div>
           </AnimatePresence>
         </div>

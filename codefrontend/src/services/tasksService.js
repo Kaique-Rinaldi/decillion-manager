@@ -1,7 +1,7 @@
 import { supabase } from "../lib/supabase"
 
 /* =========================
-   FETCH TASKS
+   FETCH
 ========================= */
 export async function fetchTasks(userId) {
   if (!userId) return []
@@ -13,7 +13,7 @@ export async function fetchTasks(userId) {
     .order("created_at", { ascending: false })
 
   if (error) {
-    console.error("Tasks error:", error)
+    console.error(error)
     return []
   }
 
@@ -21,87 +21,60 @@ export async function fetchTasks(userId) {
 }
 
 /* =========================
-   CREATE TASK
+   CREATE
 ========================= */
-export async function createTask(userId, taskData) {
-  if (!userId) throw new Error("Missing userId")
-
-  const payload = {
-    user_id: userId,
-    title: taskData?.title || "",
-    description: taskData?.description || "",
-    status: taskData?.status || "pendente"
-  }
-
+export async function createTask(userId, text) {
   const { data, error } = await supabase
     .from("tasks")
-    .insert(payload)
+    .insert({
+      user_id: userId,
+      text,
+      done: false
+    })
     .select()
     .single()
 
-  if (error) {
-    console.error("Create task error:", error)
-    throw error
-  }
+  if (error) throw error
 
   return dbToTask(data)
 }
 
 /* =========================
-   UPDATE TASK
+   UPDATE
 ========================= */
-export async function updateTask(taskId, taskData) {
-  if (!taskId) return
-
-  const payload = {}
-
-  if (taskData.title !== undefined) payload.title = taskData.title
-  if (taskData.description !== undefined) payload.description = taskData.description
-  if (taskData.status !== undefined) payload.status = taskData.status
-
+export async function updateTask(id, updates) {
   const { data, error } = await supabase
     .from("tasks")
-    .update(payload)
-    .eq("id", taskId)
+    .update(updates)
+    .eq("id", id)
     .select()
     .single()
 
-  if (error) {
-    console.error("Update task error:", error)
-    throw error
-  }
+  if (error) throw error
 
   return dbToTask(data)
 }
 
 /* =========================
-   DELETE TASK
+   DELETE
 ========================= */
-export async function deleteTask(taskId) {
-  if (!taskId) return
-
+export async function deleteTask(id) {
   const { error } = await supabase
     .from("tasks")
     .delete()
-    .eq("id", taskId)
+    .eq("id", id)
 
-  if (error) {
-    console.error("Delete task error:", error)
-    throw error
-  }
+  if (error) throw error
 }
 
 /* =========================
    MAPPER
 ========================= */
 function dbToTask(row) {
-  if (!row) return null
-
   return {
     id: row.id,
-    title: row.title || "",
-    description: row.description || "",
-    status: row.status || "pendente",
+    text: row.text,
+    done: row.done,
     createdAt: row.created_at
   }
 }

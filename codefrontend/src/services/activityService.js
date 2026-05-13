@@ -26,15 +26,13 @@ export async function fetchActivitiesByClient(clientId) {
 export async function createActivity({ clientId, type, description }) {
   if (!clientId) throw new Error("Missing clientId")
 
-  const payload = {
-    client_id: clientId,
-    type: type || "note",
-    description: description || ""
-  }
-
   const { data, error } = await supabase
     .from("activities")
-    .insert(payload)
+    .insert({
+      client_id: clientId,
+      type: type || "note",
+      description: description || ""
+    })
     .select()
     .single()
 
@@ -49,13 +47,13 @@ export async function createActivity({ clientId, type, description }) {
 /* =========================
    DELETE ACTIVITY
 ========================= */
-export async function deleteActivity(activityId) {
-  if (!activityId) return
+export async function deleteActivity(id) {
+  if (!id) return
 
   const { error } = await supabase
     .from("activities")
     .delete()
-    .eq("id", activityId)
+    .eq("id", id)
 
   if (error) {
     console.error("Delete activity error:", error)
@@ -64,11 +62,9 @@ export async function deleteActivity(activityId) {
 }
 
 /* =========================
-   MAPPER SAFE
+   MAPPER
 ========================= */
 function dbToActivity(row) {
-  if (!row) return null
-
   return {
     id: row.id,
     clientId: row.client_id,
