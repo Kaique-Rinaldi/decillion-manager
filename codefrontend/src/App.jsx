@@ -5,7 +5,7 @@ import { useToast }   from "./hooks/useToast"
 import { useDataLoader } from "./hooks/useDataLoader"
 import LoginPage      from "./components/shared/LoginPage"
 import ToastContainer from "./components/shared/Toast"
-import FinancePage    from "./components/pages/FinancePage"
+import FinancePage    from "./components/pages/ProjectFinancePage"
 import KanbanPage     from "./components/pages/KanbanPage"
 import TasksPage      from "./components/pages/TasksPage"
 
