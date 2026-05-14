@@ -1,16 +1,36 @@
 // src/services/financeService.js
 // Gestão Financeira por Projeto — Decillion CRM
-// Substitui paymentsService.js na lógica contextual de projeto
 
 import { supabase } from "../lib/supabase"
+
+// ─────────────────────────────────────────────────────────────
+// INTERNAL HELPERS
+// ─────────────────────────────────────────────────────────────
+
+/**
+ * Verifica se é um erro de conflito/duplicidade (409, unique constraint, etc.)
+ */
+function isConflictError(error) {
+  if (!error) return false
+  const code    = error?.code    ?? ""
+  const message = (error?.message ?? "").toLowerCase()
+  return (
+    code === "23505"               ||   // PostgreSQL: unique_violation
+    code === "409"                 ||   // HTTP conflict
+    message.includes("duplicate") ||
+    message.includes("unique")    ||
+    message.includes("conflict")  ||
+    message.includes("already exists")
+  )
+}
 
 // ─────────────────────────────────────────────────────────────
 // PROJECT FINANCES
 // ─────────────────────────────────────────────────────────────
 
 /**
- * Busca (ou cria) o financeiro de um projeto.
- * Retorna null se o projeto ainda não tem financeiro configurado.
+ * Busca o financeiro de um projeto pelo project_id.
+ * Retorna null se ainda não existir.
  */
 export async function fetchProjectFinance(projectId) {
   const { data, error } = await supabase
@@ -24,9 +44,39 @@ export async function fetchProjectFinance(projectId) {
 }
 
 /**
- * Cria o financeiro do projeto.
+ * Busca financeiro por ID direto (uso interno após trigger).
+ */
+export async function fetchProjectFinance_byId(financeId) {
+  const { data, error } = await supabase
+    .from("project_finances")
+    .select("*")
+    .eq("id", financeId)
+    .single()
+
+  if (error) throw error
+  return data
+}
+
+/**
+ * Cria o financeiro do projeto com proteção contra duplicidade.
+ *
+ * Estratégia "fetch-first":
+ *   1. Tenta buscar o financeiro existente
+ *   2. Se existir → retorna o existente (+ flag `alreadyExisted: true`)
+ *   3. Se não existir → cria e retorna o novo
+ *
+ * Isso evita 409 mesmo em condições de race-condition.
  */
 export async function createProjectFinance(clientId, projectId, payload) {
+  // ── 1. Verificar existência antes de inserir ──
+  const existing = await fetchProjectFinance(projectId)
+
+  if (existing) {
+    // Já existe: devolve o registro com flag para o caller exibir toast adequado
+    return { ...existing, _alreadyExisted: true }
+  }
+
+  // ── 2. Tentar criar ──
   const { data, error } = await supabase
     .from("project_finances")
     .insert({
@@ -36,6 +86,45 @@ export async function createProjectFinance(clientId, projectId, payload) {
       payment_type: payload.payment_type || null,
       notes:        payload.notes?.trim() || null,
     })
+    .select()
+    .single()
+
+  // ── 3. Tratar conflito residual (race-condition) ──
+  if (error) {
+    if (isConflictError(error)) {
+      // Outro processo criou antes de nós: busca e retorna o existente
+      const fallback = await fetchProjectFinance(projectId)
+      if (fallback) return { ...fallback, _alreadyExisted: true }
+    }
+    throw error
+  }
+
+  return data
+}
+
+/**
+ * Upsert do financeiro do projeto:
+ *   - Cria se não existir
+ *   - Atualiza se já existir
+ * Use esta função quando quiser garantir a existência sem se preocupar
+ * com a distinção create/update.
+ */
+export async function upsertProjectFinance(clientId, projectId, payload) {
+  const { data, error } = await supabase
+    .from("project_finances")
+    .upsert(
+      {
+        client_id:    clientId,
+        project_id:   projectId,
+        total_amount: Number(payload.total_amount) || 0,
+        payment_type: payload.payment_type || null,
+        notes:        payload.notes?.trim() || null,
+      },
+      {
+        onConflict:        "project_id",   // coluna com unique constraint
+        ignoreDuplicates:  false,          // merge ao invés de ignorar
+      }
+    )
     .select()
     .single()
 
@@ -154,20 +243,6 @@ export async function markPaymentPaid(paymentId, financeId) {
   // Re-busca o financeiro já atualizado pelo trigger
   const finance = await fetchProjectFinance_byId(financeId)
   return { payment, finance }
-}
-
-/**
- * Busca financeiro por ID direto (uso interno após trigger).
- */
-export async function fetchProjectFinance_byId(financeId) {
-  const { data, error } = await supabase
-    .from("project_finances")
-    .select("*")
-    .eq("id", financeId)
-    .single()
-
-  if (error) throw error
-  return data
 }
 
 /**

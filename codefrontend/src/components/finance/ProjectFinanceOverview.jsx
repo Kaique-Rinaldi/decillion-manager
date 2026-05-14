@@ -14,7 +14,7 @@
 //   onDuplicatePayment(payment)
 //   onDeletePayment(id)
 
-import { useState } from "react"
+import { useState, useRef } from "react"
 import { motion, AnimatePresence } from "framer-motion"
 import FinanceProgressBar from "./FinanceProgressBar"
 import PaymentHistory     from "./PaymentHistory"
@@ -30,10 +30,10 @@ const fmtDate = (d) => {
 }
 
 const STATUS_CONFIG = {
-  pending: { label: "Aguardando",  color: "#f59e0b", bg: "rgba(245,158,11,.1)"  },
-  partial: { label: "Em Andamento",color: "#4f6ef7", bg: "rgba(79,110,247,.1)"  },
-  paid:    { label: "Quitado",     color: "#22c97d", bg: "rgba(34,201,125,.1)"  },
-  overdue: { label: "Em Atraso",   color: "#ef4444", bg: "rgba(239,68,68,.1)"   },
+  pending: { label: "Aguardando",   color: "#f59e0b", bg: "rgba(245,158,11,.1)"  },
+  partial: { label: "Em Andamento", color: "#4f6ef7", bg: "rgba(79,110,247,.1)"  },
+  paid:    { label: "Quitado",      color: "#22c97d", bg: "rgba(34,201,125,.1)"  },
+  overdue: { label: "Em Atraso",    color: "#ef4444", bg: "rgba(239,68,68,.1)"   },
 }
 
 // ── Finance Cards ─────────────────────────────────────────────
@@ -115,19 +115,36 @@ function FinanceCards({ finance }) {
   )
 }
 
-// ── Setup Form (quando ainda não há finance) ──────────────────
-function SetupFinanceForm({ projectName, onSetup, onCancel }) {
-  const [total, setTotal] = useState("")
-  const [type,  setType]  = useState("parcelado")
-  const [notes, setNotes] = useState("")
+// ── Setup Form ────────────────────────────────────────────────
+// Protegido contra duplo-submit com ref de lock
+function SetupFinanceForm({ projectName, onSetup }) {
+  const [total,  setTotal]  = useState("")
+  const [type,   setType]   = useState("parcelado")
+  const [notes,  setNotes]  = useState("")
   const [saving, setSaving] = useState(false)
-  const [error, setError]   = useState("")
+  const [error,  setError]  = useState("")
+
+  // Ref de lock: impede segunda chamada enquanto a primeira está em voo
+  const submittingRef = useRef(false)
 
   const handleSubmit = async () => {
+    if (submittingRef.current) return   // já está enviando
     if (!total || Number(total) <= 0) { setError("Informe o valor total do projeto"); return }
+
+    submittingRef.current = true
     setSaving(true)
-    await onSetup({ total_amount: parseFloat(total), payment_type: type, notes: notes.trim() || null })
-    setSaving(false)
+    setError("")
+
+    try {
+      await onSetup({
+        total_amount: parseFloat(total),
+        payment_type: type,
+        notes:        notes.trim() || null,
+      })
+    } finally {
+      submittingRef.current = false
+      setSaving(false)
+    }
   }
 
   const inputStyle = {
@@ -156,21 +173,31 @@ function SetupFinanceForm({ projectName, onSetup, onCancel }) {
           Configurar Financeiro
         </div>
         <div style={{ fontSize: 11, color: "#5a6478" }}>
-          Defina o valor total para acompanhar o progresso financeiro de <strong style={{ color: "#8892a4" }}>{projectName}</strong>
+          Defina o valor total para acompanhar o progresso financeiro de{" "}
+          <strong style={{ color: "#8892a4" }}>{projectName}</strong>
         </div>
       </div>
 
       <div style={{ display: "grid", gap: 14 }}>
+        {/* Valor total */}
         <div>
           <label style={labelStyle}>Valor Total do Projeto (R$) *</label>
           <div style={{ position: "relative" }}>
-            <span style={{ position: "absolute", left: 12, top: "50%", transform: "translateY(-50%)", fontSize: 11, color: "#5a6478", fontFamily: "monospace" }}>R$</span>
+            <span style={{
+              position: "absolute", left: 12, top: "50%", transform: "translateY(-50%)",
+              fontSize: 11, color: "#5a6478", fontFamily: "monospace",
+            }}>R$</span>
             <input
               type="number" min="0" step="0.01"
               value={total}
               onChange={(e) => { setTotal(e.target.value); setError("") }}
               placeholder="0,00"
-              style={{ ...inputStyle, paddingLeft: 36, borderColor: error ? "#ef4444" : "rgba(255,255,255,.1)" }}
+              disabled={saving}
+              style={{
+                ...inputStyle, paddingLeft: 36,
+                borderColor: error ? "#ef4444" : "rgba(255,255,255,.1)",
+                opacity: saving ? .6 : 1,
+              }}
               onFocus={e => e.target.style.borderColor = "#4f6ef7"}
               onBlur={e => e.target.style.borderColor = error ? "#ef4444" : "rgba(255,255,255,.1)"}
             />
@@ -178,9 +205,15 @@ function SetupFinanceForm({ projectName, onSetup, onCancel }) {
           {error && <div style={{ fontSize: 10, color: "#ef4444", marginTop: 3 }}>{error}</div>}
         </div>
 
+        {/* Tipo de pagamento */}
         <div>
           <label style={labelStyle}>Tipo de Pagamento</label>
-          <select value={type} onChange={e => setType(e.target.value)} style={{ ...inputStyle, cursor: "pointer", appearance: "none" }}>
+          <select
+            value={type}
+            onChange={e => setType(e.target.value)}
+            disabled={saving}
+            style={{ ...inputStyle, cursor: "pointer", appearance: "none", opacity: saving ? .6 : 1 }}
+          >
             <option value="parcelado">Parcelado</option>
             <option value="avulso">Avulso / Único</option>
             <option value="recorrente">Recorrente / Mensalidade</option>
@@ -188,32 +221,42 @@ function SetupFinanceForm({ projectName, onSetup, onCancel }) {
           </select>
         </div>
 
+        {/* Observações */}
         <div>
           <label style={labelStyle}>Observações</label>
           <textarea
-            value={notes} onChange={e => setNotes(e.target.value)}
+            value={notes}
+            onChange={e => setNotes(e.target.value)}
             placeholder="Acordos, condições de pagamento..."
-            rows={2} style={{ ...inputStyle, resize: "vertical", lineHeight: 1.6 }}
+            rows={2}
+            disabled={saving}
+            style={{ ...inputStyle, resize: "vertical", lineHeight: 1.6, opacity: saving ? .6 : 1 }}
           />
         </div>
       </div>
 
-      <div style={{ display: "flex", gap: 10, marginTop: 20 }}>
-        {onCancel && (
-          <button onClick={onCancel} style={{
-            flex: 1, padding: "9px 0", borderRadius: 8, fontSize: 12, cursor: "pointer",
-            background: "rgba(255,255,255,.04)", border: "1px solid rgba(255,255,255,.1)",
-            color: "#8892a4", fontFamily: "inherit",
-          }}>Cancelar</button>
-        )}
-        <button onClick={handleSubmit} disabled={saving} style={{
-          flex: 2, padding: "9px 0", borderRadius: 8, fontSize: 12, fontWeight: 600,
-          cursor: saving ? "default" : "pointer",
-          background: saving ? "rgba(79,110,247,.6)" : "#4f6ef7",
-          border: "none", color: "#fff", fontFamily: "inherit",
-          display: "flex", alignItems: "center", justifyContent: "center", gap: 8,
-        }}>
-          {saving ? "Salvando…" : "Configurar Financeiro"}
+      <div style={{ marginTop: 20 }}>
+        <button
+          onClick={handleSubmit}
+          disabled={saving}
+          style={{
+            width: "100%", padding: "10px 0", borderRadius: 8,
+            fontSize: 12, fontWeight: 600,
+            cursor: saving ? "default" : "pointer",
+            background: saving ? "rgba(79,110,247,.55)" : "#4f6ef7",
+            border: "none", color: "#fff", fontFamily: "inherit",
+            display: "flex", alignItems: "center", justifyContent: "center", gap: 8,
+            transition: "background .2s",
+          }}
+        >
+          {saving && (
+            <div style={{
+              width: 13, height: 13, borderRadius: "50%",
+              border: "2px solid rgba(255,255,255,.2)", borderTopColor: "#fff",
+              animation: "spin .6s linear infinite",
+            }} />
+          )}
+          {saving ? "Configurando…" : "Configurar Financeiro"}
         </button>
       </div>
     </motion.div>
@@ -223,7 +266,10 @@ function SetupFinanceForm({ projectName, onSetup, onCancel }) {
 // ── Upcoming Payments ─────────────────────────────────────────
 function UpcomingDue({ payments }) {
   const upcoming = payments
-    .filter(p => p.status === "pending" || p.status === "overdue" || p.status === "pendente" || p.status === "atrasado")
+    .filter(p =>
+      p.status === "pending" || p.status === "overdue" ||
+      p.status === "pendente" || p.status === "atrasado"
+    )
     .sort((a, b) => (a.due_date || "").localeCompare(b.due_date || ""))
     .slice(0, 4)
 
@@ -246,12 +292,20 @@ function UpcomingDue({ payments }) {
           return (
             <div key={p.id} style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
               <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-                <div style={{ width: 6, height: 6, borderRadius: "50%", background: isOverdue ? "#ef4444" : "#f59e0b", flexShrink: 0 }} />
+                <div style={{
+                  width: 6, height: 6, borderRadius: "50%",
+                  background: isOverdue ? "#ef4444" : "#f59e0b", flexShrink: 0,
+                }} />
                 <span style={{ fontSize: 12, color: "#8892a4" }}>{p.title}</span>
               </div>
               <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
-                <span style={{ fontSize: 10, color: "#5a6478", fontFamily: "monospace" }}>{fmtDate(p.due_date)}</span>
-                <span style={{ fontSize: 12, fontWeight: 700, color: isOverdue ? "#ef4444" : "#e8eaf0", fontFamily: "monospace" }}>
+                <span style={{ fontSize: 10, color: "#5a6478", fontFamily: "monospace" }}>
+                  {fmtDate(p.due_date)}
+                </span>
+                <span style={{
+                  fontSize: 12, fontWeight: 700, fontFamily: "monospace",
+                  color: isOverdue ? "#ef4444" : "#e8eaf0",
+                }}>
                   {fmt(p.amount)}
                 </span>
               </div>
@@ -267,7 +321,6 @@ function UpcomingDue({ payments }) {
 function FinanceSkeleton() {
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
-      {/* Cards skeleton */}
       <div style={{ display: "grid", gridTemplateColumns: "repeat(4,1fr)", gap: 10 }}>
         {Array.from({ length: 4 }).map((_, i) => (
           <div key={i} style={{
@@ -278,14 +331,12 @@ function FinanceSkeleton() {
           }} />
         ))}
       </div>
-      {/* Progress skeleton */}
       <div style={{
         height: 32, borderRadius: 8,
         background: "linear-gradient(90deg,#111520 25%,#161b2a 50%,#111520 75%)",
         backgroundSize: "400% 100%",
         animation: "shimmer 1.4s ease infinite",
       }} />
-      {/* List skeleton */}
       {Array.from({ length: 3 }).map((_, i) => (
         <div key={i} style={{
           height: 64, borderRadius: 10,
@@ -313,8 +364,6 @@ export default function ProjectFinanceOverview({
   onDuplicatePayment,
   onDeletePayment,
 }) {
-  const [editingTotal, setEditingTotal] = useState(false)
-
   if (loading) return <FinanceSkeleton />
 
   // Sem financeiro configurado → setup
@@ -388,8 +437,7 @@ export default function ProjectFinanceOverview({
       <div>
         <div style={{
           fontSize: 9, color: "#5a6478", fontFamily: "monospace",
-          textTransform: "uppercase", letterSpacing: ".6px",
-          marginBottom: 12,
+          textTransform: "uppercase", letterSpacing: ".6px", marginBottom: 12,
         }}>
           Histórico de Pagamentos
         </div>
