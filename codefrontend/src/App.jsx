@@ -5,10 +5,9 @@ import { useToast }       from "./hooks/useToast"
 import { useDataLoader }  from "./hooks/useDataLoader"
 import LoginPage          from "./components/shared/LoginPage"
 import ToastContainer     from "./components/shared/Toast"
-import FinancePage        from "./components/finance/FinancePage"   // ← NOVO módulo financeiro
+import FinancePage        from "./components/finance/FinancePage"
 import KanbanPage         from "./components/pages/KanbanPage"
 import TasksPage          from "./components/pages/TasksPage"
-// ← REMOVIDO: ProjectFinancePage, financeClient, financeProject, openFinance, project_finance
 
 import {
   fetchClients, createClient, updateClient, deleteClient,
@@ -151,19 +150,19 @@ const NAV_SECTIONS = [
 ]
 
 const PAGE_META = {
-  dashboard:     { title:"Dashboard",      sub:"Visão geral do sistema"          },
-  pipeline:      { title:"Pipeline CRM",   sub:"Kanban de oportunidades"         },
-  clients:       { title:"Clientes",       sub:"Base de contatos e contas"       },
-  kanban:        { title:"Kanban",         sub:"Quadro de projetos"              },
-  tasks:         { title:"Tarefas",        sub:"Gerenciamento de atividades"     },
-  finance:       { title:"Financeiro",     sub:"Visão geral das receitas e pagamentos" },  // ← ATUALIZADO
-  reports:       { title:"Relatórios",     sub:"Análises e métricas"             },
-  notifications: { title:"Notificações",   sub:"Central de alertas"              },
-  settings:      { title:"Configurações",  sub:"Preferências do sistema"         },
+  dashboard:     { title:"Dashboard",      sub:"Visão geral do sistema"               },
+  pipeline:      { title:"Pipeline CRM",   sub:"Kanban de oportunidades"              },
+  clients:       { title:"Clientes",       sub:"Base de contatos e contas"            },
+  kanban:        { title:"Kanban",         sub:"Quadro de projetos"                   },
+  tasks:         { title:"Tarefas",        sub:"Gerenciamento de atividades"          },
+  finance:       { title:"Financeiro",     sub:"Visão geral das receitas e pagamentos"},
+  reports:       { title:"Relatórios",     sub:"Análises e métricas"                  },
+  notifications: { title:"Notificações",   sub:"Central de alertas"                   },
+  settings:      { title:"Configurações",  sub:"Preferências do sistema"              },
 }
 
 // ═══════════════════════════════════════════════════════════════════
-// 4. UI PRIMITIVES (inalterado)
+// 4. UI PRIMITIVES
 // ═══════════════════════════════════════════════════════════════════
 const BADGE_COLOR = {
   green:  { bg:"rgba(34,201,125,.12)",  color:"#22c97d" },
@@ -233,14 +232,6 @@ function Card({ title, sub, children, style={} }) {
           {sub && <div style={{ fontSize:10, color:"#5a6478", marginTop:2 }}>{sub}</div>}
         </div>
       )}
-      {children}
-    </div>
-  )
-}
-function SectionLabel({ children }) {
-  return (
-    <div style={{ fontSize:10, fontWeight:600, color:"#5a6478", textTransform:"uppercase",
-      letterSpacing:".8px", fontFamily:"monospace", marginBottom:10 }}>
       {children}
     </div>
   )
@@ -434,7 +425,6 @@ function CommandPalette({ open, onClose, clients, setActiveTab, openClientModal 
 // 6. CLIENT DETAIL MODAL
 // ═══════════════════════════════════════════════════════════════════
 function ClientDetailModal({ client, onClose, onEdit, onAddActivity }) {
-  // ← REMOVIDO: onOpenFinance — financeiro agora é acessado pela sidebar
   const [tab, setTab] = useState("overview")
   const [newNote, setNewNote] = useState(client.notes || "")
   const [editingNote, setEditingNote] = useState(false)
@@ -443,7 +433,6 @@ function ClientDetailModal({ client, onClose, onEdit, onAddActivity }) {
   const pal = avatarColor(client.name)
 
   const TABS = ["overview","timeline","notas"]
-  // ← REMOVIDO: tab "pagamentos" — financeiro é módulo próprio
 
   return (
     <div style={{ position:"fixed", inset:0, background:"rgba(0,0,0,.65)", zIndex:1500,
@@ -602,9 +591,8 @@ function ClientDetailModal({ client, onClose, onEdit, onAddActivity }) {
 }
 
 // ═══════════════════════════════════════════════════════════════════
-// 7. VIEWS (inalteradas)
+// 7. DASHBOARD VIEW
 // ═══════════════════════════════════════════════════════════════════
-
 function DashboardView({ clients, deals }) {
   const activeClients = clients.filter(c => c.projectStatus === "andamento").length
   const totalRevenue  = clients.reduce((s,c) => s + (c.paymentStatus === "pago" ? c.projectValue : 0), 0)
@@ -714,6 +702,9 @@ function DashboardView({ clients, deals }) {
   )
 }
 
+// ═══════════════════════════════════════════════════════════════════
+// 8. PIPELINE VIEW
+// ═══════════════════════════════════════════════════════════════════
 function PipelineView({ deals, setDeals, addToast, user }) {
   const [draggingId,  setDraggingId]  = useState(null)
   const [overStage,   setOverStage]   = useState(null)
@@ -723,11 +714,14 @@ function PipelineView({ deals, setDeals, addToast, user }) {
   const [saving,      setSaving]      = useState(false)
   const [editingDeal, setEditingDeal] = useState(null)
   const [confirmId,   setConfirmId]   = useState(null)
+
   const totalValue = deals.reduce((s,d) => s + d.value, 0)
   const openDeals  = deals.filter(d => d.stage !== "fechado")
   const avgTicket  = openDeals.length > 0 ? openDeals.reduce((s,d) => s + d.value, 0) / openDeals.length : 0
+
   function onDragStart(id) { setDraggingId(id) }
   function onDragOver(e, stageKey) { e.preventDefault(); setOverStage(stageKey) }
+
   async function onDrop(targetStage) {
     setOverStage(null)
     if (!draggingId) return
@@ -744,9 +738,11 @@ function PipelineView({ deals, setDeals, addToast, user }) {
     }
     setDraggingId(null)
   }
+
   function openCreate() { setForm({ stage:"lead", value:"", name:"", company:"" }); setFormErrors({}); setEditingDeal(null); setShowForm(true) }
   function openEdit(deal) { setForm({ name: deal.name, company: deal.company, value: deal.value, stage: deal.stage }); setFormErrors({}); setEditingDeal(deal); setShowForm(true) }
   function closeForm() { setShowForm(false); setEditingDeal(null) }
+
   function validateForm(f) {
     const e = {}
     if (!f.name?.trim()) e.name = "Nome obrigatório"
@@ -754,15 +750,20 @@ function PipelineView({ deals, setDeals, addToast, user }) {
     if (!f.stage) e.stage = "Selecione uma etapa"
     return e
   }
+
   function setF(k, v) { setForm(p => ({ ...p, [k]: v })); setFormErrors(p => ({ ...p, [k]: "" })) }
+
   async function handleSave(e) {
     e.preventDefault()
     const errs = validateForm(form)
     if (Object.keys(errs).length) { setFormErrors(errs); return }
     setSaving(true)
     try {
-      const payload = { name:form.name.trim(), company:form.company?.trim()||"", value:Number(form.value), stage:form.stage,
-        closedAt: form.stage==="fechado" ? new Date().toISOString().split("T")[0] : null }
+      const payload = {
+        name: form.name.trim(), company: form.company?.trim()||"",
+        value: Number(form.value), stage: form.stage,
+        closedAt: form.stage==="fechado" ? new Date().toISOString().split("T")[0] : null
+      }
       if (editingDeal) {
         const updated = await updateDeal(editingDeal.id, payload)
         setDeals(prev => prev.map(d => d.id === editingDeal.id ? updated : d))
@@ -776,6 +777,7 @@ function PipelineView({ deals, setDeals, addToast, user }) {
     } catch (err) { addToast(`Erro: ${err.message}`, "error") }
     finally { setSaving(false) }
   }
+
   async function handleDelete(id) {
     try {
       const { deleteDeal } = await import("./services/dealsService")
@@ -785,8 +787,13 @@ function PipelineView({ deals, setDeals, addToast, user }) {
     } catch (err) { addToast(`Erro ao deletar: ${err.message}`, "error") }
     setConfirmId(null)
   }
-  const inputStyle = { background:"#161b2a", border:"1px solid rgba(255,255,255,.15)", borderRadius:7,
-    padding:"7px 10px", fontSize:12, color:"#e8eaf0", fontFamily:"inherit", outline:"none", width:"100%", boxSizing:"border-box" }
+
+  const inputStyle = {
+    background:"#161b2a", border:"1px solid rgba(255,255,255,.15)", borderRadius:7,
+    padding:"7px 10px", fontSize:12, color:"#e8eaf0", fontFamily:"inherit",
+    outline:"none", width:"100%", boxSizing:"border-box"
+  }
+
   return (
     <div>
       <div style={{ display:"flex", justifyContent:"flex-end", marginBottom:16 }}>
@@ -795,13 +802,20 @@ function PipelineView({ deals, setDeals, addToast, user }) {
           + Nova negociação
         </button>
       </div>
+
       <div style={{ display:"grid", gridTemplateColumns:"repeat(5,1fr)", gap:8, marginBottom:20 }}>
         {PIPELINE_STAGE_KEYS.map(stageKey => {
-          const stage = PIPELINE_STAGE[stageKey]; const stageDeals = deals.filter(d => d.stage === stageKey)
-          const isOver = overStage === stageKey; const stageValue = stageDeals.reduce((s,d) => s + d.value, 0)
+          const stage = PIPELINE_STAGE[stageKey]
+          const stageDeals = deals.filter(d => d.stage === stageKey)
+          const isOver = overStage === stageKey
+          const stageValue = stageDeals.reduce((s,d) => s + d.value, 0)
           return (
-            <div key={stageKey} onDragOver={e => onDragOver(e, stageKey)} onDragLeave={() => setOverStage(null)} onDrop={() => onDrop(stageKey)}
-              style={{ background: isOver ? stage.color+"14" : "#111520", border:`1px solid ${isOver ? stage.color+"60" : "rgba(255,255,255,.06)"}`,
+            <div key={stageKey}
+              onDragOver={e => onDragOver(e, stageKey)}
+              onDragLeave={() => setOverStage(null)}
+              onDrop={() => onDrop(stageKey)}
+              style={{ background: isOver ? stage.color+"14" : "#111520",
+                border:`1px solid ${isOver ? stage.color+"60" : "rgba(255,255,255,.06)"}`,
                 borderRadius:10, padding:10, minHeight:160, transition:"all .15s" }}>
               <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", marginBottom:6 }}>
                 <div style={{ fontSize:10, fontWeight:700, textTransform:"uppercase", letterSpacing:".5px", fontFamily:"monospace", color:stage.color }}>{stage.label}</div>
@@ -812,12 +826,12 @@ function PipelineView({ deals, setDeals, addToast, user }) {
                 {stageDeals.map(d => (
                   <motion.div key={d.id} layout initial={{ opacity:0, y:-4 }} animate={{ opacity:1, y:0 }} exit={{ opacity:0, scale:.95 }}
                     draggable onDragStart={() => onDragStart(d.id)}
-                    style={{ background:"#161b2a", border:"1px solid rgba(255,255,255,.06)", borderRadius:8, padding:8, marginBottom:6, cursor:"grab",
-                      opacity: draggingId===d.id ? .45 : 1, position:"relative" }}>
+                    style={{ background:"#161b2a", border:"1px solid rgba(255,255,255,.06)", borderRadius:8, padding:8, marginBottom:6,
+                      cursor:"grab", opacity: draggingId===d.id ? .45 : 1, position:"relative" }}>
                     <div style={{ position:"absolute", top:6, right:6, display:"flex", gap:4 }}>
-                      <button onClick={e => { e.stopPropagation(); openEdit(d) }} title="Editar"
+                      <button onClick={e => { e.stopPropagation(); openEdit(d) }}
                         style={{ width:20, height:20, borderRadius:4, background:"rgba(79,110,247,.12)", border:"1px solid rgba(79,110,247,.2)", color:"#4f6ef7", cursor:"pointer", display:"flex", alignItems:"center", justifyContent:"center", fontSize:10 }}>✎</button>
-                      <button onClick={e => { e.stopPropagation(); setConfirmId(d.id) }} title="Deletar"
+                      <button onClick={e => { e.stopPropagation(); setConfirmId(d.id) }}
                         style={{ width:20, height:20, borderRadius:4, background:"rgba(239,68,68,.1)", border:"1px solid rgba(239,68,68,.2)", color:"#ef4444", cursor:"pointer", display:"flex", alignItems:"center", justifyContent:"center", fontSize:10 }}>×</button>
                     </div>
                     <div style={{ fontSize:11, fontWeight:500, color:"#e8eaf0", marginBottom:3, paddingRight:44, overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>{d.name}</div>
@@ -827,21 +841,33 @@ function PipelineView({ deals, setDeals, addToast, user }) {
                   </motion.div>
                 ))}
               </AnimatePresence>
-              {stageDeals.length===0 && <div style={{ border:"1px dashed rgba(255,255,255,.07)", borderRadius:7, height:48, display:"flex", alignItems:"center", justifyContent:"center", fontSize:10, color:"#3a4255" }}>Solte aqui</div>}
+              {stageDeals.length===0 && (
+                <div style={{ border:"1px dashed rgba(255,255,255,.07)", borderRadius:7, height:48,
+                  display:"flex", alignItems:"center", justifyContent:"center", fontSize:10, color:"#3a4255" }}>
+                  Solte aqui
+                </div>
+              )}
             </div>
           )
         })}
       </div>
+
       <div style={{ display:"grid", gridTemplateColumns:"repeat(3,1fr)", gap:12 }}>
         <StatCard label="Valor total pipeline" value={formatCurrency(totalValue)} iconPath="M12 2a10 10 0 1 0 0 20A10 10 0 0 0 12 2zM12 6v6l4 2" iconColor="green"/>
         <StatCard label="Ticket médio (abertos)" value={formatCurrency(avgTicket)} iconPath="M18 20V10M12 20V4M6 20v-6" iconColor="blue"/>
         <StatCard label="Negociações em aberto" value={openDeals.length} iconPath="M4 6h16M4 12h16M4 18h16" iconColor="amber"/>
       </div>
+
       <AnimatePresence>
         {showForm && (
-          <div style={{ position:"fixed", inset:0, background:"rgba(0,0,0,.6)", zIndex:1000, display:"flex", alignItems:"center", justifyContent:"center", padding:20, backdropFilter:"blur(4px)" }} onClick={closeForm}>
-            <motion.div initial={{ scale:.93, opacity:0, y:10 }} animate={{ scale:1, opacity:1, y:0 }} exit={{ scale:.93, opacity:0 }} transition={{ duration:.18 }} onClick={e => e.stopPropagation()}
-              style={{ background:"#111520", border:"1px solid rgba(255,255,255,.1)", borderRadius:16, width:"100%", maxWidth:460, boxShadow:"0 20px 60px rgba(0,0,0,.5)" }}>
+          <div style={{ position:"fixed", inset:0, background:"rgba(0,0,0,.6)", zIndex:1000,
+            display:"flex", alignItems:"center", justifyContent:"center", padding:20, backdropFilter:"blur(4px)" }}
+            onClick={closeForm}>
+            <motion.div initial={{ scale:.93, opacity:0, y:10 }} animate={{ scale:1, opacity:1, y:0 }}
+              exit={{ scale:.93, opacity:0 }} transition={{ duration:.18 }}
+              onClick={e => e.stopPropagation()}
+              style={{ background:"#111520", border:"1px solid rgba(255,255,255,.1)", borderRadius:16,
+                width:"100%", maxWidth:460, boxShadow:"0 20px 60px rgba(0,0,0,.5)" }}>
               <div style={{ padding:"20px 24px 0", display:"flex", alignItems:"center", justifyContent:"space-between" }}>
                 <div style={{ fontSize:15, fontWeight:600, color:"#e8eaf0" }}>{editingDeal ? "✏️ Editar negociação" : "➕ Nova negociação"}</div>
                 <button onClick={closeForm} style={{ background:"none", border:"1px solid rgba(255,255,255,.1)", borderRadius:7, color:"#8892a4", cursor:"pointer", width:30, height:30, display:"flex", alignItems:"center", justifyContent:"center", fontSize:18 }}>×</button>
@@ -874,8 +900,10 @@ function PipelineView({ deals, setDeals, addToast, user }) {
                   </div>
                 </div>
                 <div style={{ display:"flex", gap:8, justifyContent:"flex-end", paddingTop:16, marginTop:4, borderTop:"1px solid rgba(255,255,255,.06)" }}>
-                  <button type="button" onClick={closeForm} disabled={saving} style={{ padding:"7px 16px", borderRadius:7, background:"rgba(255,255,255,.04)", border:"1px solid rgba(255,255,255,.1)", color:"#8892a4", fontSize:12, cursor:"pointer", fontFamily:"inherit" }}>Cancelar</button>
-                  <button type="submit" disabled={saving} style={{ padding:"7px 16px", borderRadius:7, background:"#4f6ef7", border:"none", color:"#fff", fontSize:12, fontWeight:500, cursor:"pointer", fontFamily:"inherit", display:"flex", alignItems:"center", gap:6 }}>
+                  <button type="button" onClick={closeForm} disabled={saving}
+                    style={{ padding:"7px 16px", borderRadius:7, background:"rgba(255,255,255,.04)", border:"1px solid rgba(255,255,255,.1)", color:"#8892a4", fontSize:12, cursor:"pointer", fontFamily:"inherit" }}>Cancelar</button>
+                  <button type="submit" disabled={saving}
+                    style={{ padding:"7px 16px", borderRadius:7, background:"#4f6ef7", border:"none", color:"#fff", fontSize:12, fontWeight:500, cursor:"pointer", fontFamily:"inherit", display:"flex", alignItems:"center", gap:6 }}>
                     {saving && <div style={{ width:12, height:12, borderRadius:"50%", border:"2px solid rgba(255,255,255,.3)", borderTopColor:"#fff", animation:"spin .6s linear infinite" }}/>}
                     {saving ? "Salvando…" : editingDeal ? "Salvar alterações" : "Criar negociação"}
                   </button>
@@ -885,11 +913,17 @@ function PipelineView({ deals, setDeals, addToast, user }) {
           </div>
         )}
       </AnimatePresence>
+
       <AnimatePresence>
         {confirmId && (
-          <div style={{ position:"fixed", inset:0, background:"rgba(0,0,0,.6)", zIndex:1100, display:"flex", alignItems:"center", justifyContent:"center", backdropFilter:"blur(4px)" }} onClick={() => setConfirmId(null)}>
-            <motion.div initial={{ scale:.9, opacity:0 }} animate={{ scale:1, opacity:1 }} exit={{ scale:.9, opacity:0 }} transition={{ duration:.16 }} onClick={e => e.stopPropagation()}
-              style={{ background:"#111520", border:"1px solid rgba(255,255,255,.1)", borderRadius:14, padding:28, maxWidth:340, width:"100%", textAlign:"center", boxShadow:"0 20px 60px rgba(0,0,0,.5)" }}>
+          <div style={{ position:"fixed", inset:0, background:"rgba(0,0,0,.6)", zIndex:1100,
+            display:"flex", alignItems:"center", justifyContent:"center", backdropFilter:"blur(4px)" }}
+            onClick={() => setConfirmId(null)}>
+            <motion.div initial={{ scale:.9, opacity:0 }} animate={{ scale:1, opacity:1 }}
+              exit={{ scale:.9, opacity:0 }} transition={{ duration:.16 }}
+              onClick={e => e.stopPropagation()}
+              style={{ background:"#111520", border:"1px solid rgba(255,255,255,.1)", borderRadius:14,
+                padding:28, maxWidth:340, width:"100%", textAlign:"center", boxShadow:"0 20px 60px rgba(0,0,0,.5)" }}>
               <div style={{ fontSize:36, marginBottom:12 }}>🗑</div>
               <div style={{ fontSize:16, fontWeight:600, color:"#e8eaf0", marginBottom:8 }}>Deletar negociação?</div>
               <div style={{ fontSize:12, color:"#8892a4", marginBottom:24, lineHeight:1.6 }}>Esta ação não pode ser desfeita.</div>
@@ -901,12 +935,17 @@ function PipelineView({ deals, setDeals, addToast, user }) {
           </div>
         )}
       </AnimatePresence>
+
       <style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>
     </div>
   )
 }
 
+// ═══════════════════════════════════════════════════════════════════
+// 9. CLIENTS VIEW  (única definição — sem duplicata)
+// ═══════════════════════════════════════════════════════════════════
 function ClientsView({ clients, setClients, addToast, openClientModal, user, dataLoading }) {
+
   const [rawQuery,      setRawQuery]      = useState("")
   const [filterPayment, setFilterPayment] = useState("all")
   const [filterProject, setFilterProject] = useState("all")
@@ -928,45 +967,31 @@ function ClientsView({ clients, setClients, addToast, openClientModal, user, dat
   const query = useDebounce(rawQuery, 250)
 
   useEffect(() => {
-    function handle(e) {
-      openEdit(e.detail)
-    }
-
+    function handle(e) { openEdit(e.detail) }
     window.addEventListener("crm:editClient", handle)
-
-    return () => {
-      window.removeEventListener("crm:editClient", handle)
-    }
+    return () => window.removeEventListener("crm:editClient", handle)
   }, [])
 
-  // ─────────────────────────────────────────────
-  // OPEN EDIT
-  // ─────────────────────────────────────────────
-  function openEdit(client) {
-    setEditingId(client.id)
-
+  function openEdit(c) {
+    setEditingId(c.id)
     setForm({
-      name: client.name || "",
-      company: client.company || "",
-      email: client.email || "",
-      phone: client.phone || "",
-      projectName: client.projectName || "",
-      projectOwner: client.projectOwner || "",
-      projectStatus: client.projectStatus || "pendente",
-      projectProgress: client.projectProgress || 0,
-      projectValue: client.projectValue || 0,
-      paymentStatus: client.paymentStatus || "pendente",
-      startDate: client.startDate || "",
-      endDate: client.endDate || "",
-      notes: client.notes || "",
+      name: c.name || "", company: c.company || "", email: c.email || "",
+      phone: c.phone || "", projectName: c.projectName || "", projectOwner: c.projectOwner || "",
+      projectStatus: c.projectStatus || "andamento", projectProgress: c.projectProgress || 0,
+      projectValue: c.projectValue || 0, paymentStatus: c.paymentStatus || "pendente",
+      startDate: c.startDate || "", endDate: c.endDate || "", notes: c.notes || "",
     })
-
+    setFormErrors({})
     setShowForm(true)
   }
 
-  // ─────────────────────────────────────────────
-  // CLOSE FORM
-  // ─────────────────────────────────────────────
+  function openCreate() {
+    setEditingId(null)
+    setForm({ paymentStatus:"pendente", projectStatus:"andamento", projectProgress: PROGRESS_BY_STATUS["andamento"] })
+    setFormErrors({})
+    setShowForm(true)
+  }
+
   function closeForm() {
     setShowForm(false)
     setEditingId(null)
@@ -974,303 +999,348 @@ function ClientsView({ clients, setClients, addToast, openClientModal, user, dat
     setFormErrors({})
   }
 
-  // ─────────────────────────────────────────────
-  // VALIDATION
-  // ─────────────────────────────────────────────
-  function validateForm(data) {
-    const errors = {}
-
-    if (!data.name?.trim()) {
-      errors.name = "Nome obrigatório"
-    }
-
-    if (!data.email?.trim()) {
-      errors.email = "Email obrigatório"
-    }
-
-    if (!data.projectName?.trim()) {
-      errors.projectName = "Projeto obrigatório"
-    }
-
-    return errors
+  function validateForm(f) {
+    const e = {}
+    if (!f.name?.trim())         e.name         = "Nome obrigatório"
+    if (!f.email?.trim())        e.email        = "Email obrigatório"
+    else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(f.email)) e.email = "Email inválido"
+    if (!f.phone?.trim())        e.phone        = "Telefone obrigatório"
+    if (!f.projectValue || Number(f.projectValue) <= 0) e.projectValue = "Valor deve ser > 0"
+    if (!f.paymentStatus)        e.paymentStatus = "Selecione"
+    if (!f.projectStatus)        e.projectStatus = "Selecione"
+    if (!f.startDate)            e.startDate    = "Data obrigatória"
+    if (!f.endDate)              e.endDate      = "Data obrigatória"
+    if (f.startDate && f.endDate && f.endDate < f.startDate) e.endDate = "Deve ser após o início"
+    if (!f.projectName?.trim())  e.projectName  = "Nome do projeto obrigatório"
+    if (!f.projectOwner?.trim()) e.projectOwner = "Responsável obrigatório"
+    return e
   }
 
-  // ─────────────────────────────────────────────
-  // HANDLE SAVE
-  // ─────────────────────────────────────────────
+  function setF(k, v) {
+    setForm(p => {
+      const next = { ...p, [k]: v }
+      if (k === "projectStatus" && v in PROGRESS_BY_STATUS) next.projectProgress = PROGRESS_BY_STATUS[v]
+      return next
+    })
+    setFormErrors(p => ({ ...p, [k]: "" }))
+  }
+
   async function handleSave(e) {
     e.preventDefault()
-
     const errs = validateForm(form)
-
-    if (Object.keys(errs).length) {
-      setFormErrors(errs)
-      return
-    }
-
+    if (Object.keys(errs).length) { setFormErrors(errs); return }
     setSaving(true)
-
     try {
-      const progress = Math.min(
-        100,
-        Math.max(0, Number(form.projectProgress) || 0)
-      )
-
-      const clientData = {
-        ...form,
-        projectValue: Number(form.projectValue) || 0,
-        projectProgress: progress,
-      }
-
-      // ─────────────────────────────────────────
-      // UPDATE CLIENT
-      // ─────────────────────────────────────────
+      const progress = Math.min(100, Math.max(0, Number(form.projectProgress) || 0))
+      const clientData = { ...form, projectValue: Number(form.projectValue), projectProgress: progress }
       if (editingId) {
         const updated = await updateClient(editingId, clientData)
-
-        setClients(prev =>
-          prev.map(c => c.id === editingId ? updated : c)
-        )
-
+        setClients(prev => prev.map(c => c.id === editingId ? updated : c))
         addToast("Cliente atualizado!", "success")
-
         closeForm()
-
       } else {
-
-        // ───────────────────────────────────────
-        // CREATE CLIENT
-        // ───────────────────────────────────────
-        const newActivity = [{
-          id: `a${Date.now()}`,
-          type: "created",
-          text: "Cliente criado",
-          date: new Date().toISOString().split("T")[0],
-          user: user.email,
-        }]
-
+        const newActivity = [{ id:`a${Date.now()}`, type:"created", text:"Cliente criado",
+          date: new Date().toISOString().split("T")[0], user: user.email }]
         try {
-          const newClient = await createClient(user.id, {
-            ...clientData,
-            kanbanCol: "backlog",
-            tags: [],
-            activities: newActivity,
-          })
-
-          // adiciona na lista local
+          const newClient = await createClient(user.id, { ...clientData, kanbanCol:"backlog", tags:[], activities: newActivity })
           setClients(prev => [newClient, ...prev])
-
-          // toast sucesso
-          addToast(
-            "Cliente e registro financeiro criados! 🎉",
-            "success"
-          )
-
+          addToast("Cliente e registro financeiro criados! 🎉", "success")
           closeForm()
-
         } catch (err) {
-
-          // CLIENTE SALVO MAS FINANCEIRO FALHOU
-          if (
-            err.message?.startsWith("CLIENT_SAVED_FINANCE_FAILED:")
-            && err.clientCreated
-          ) {
-
-            setClients(prev => [
-              err.clientCreated,
-              ...prev
-            ])
-
-            addToast(
-              "Cliente criado, mas o registro financeiro não foi gerado automaticamente.",
-              "warning"
-            )
-
+          if (err.message?.startsWith("CLIENT_SAVED_FINANCE_FAILED:") && err.clientCreated) {
+            setClients(prev => [err.clientCreated, ...prev])
+            addToast("Cliente criado, mas o financeiro não foi gerado automaticamente.", "warning")
             closeForm()
-
-          } else {
-
-            // ERRO TOTAL
-            throw err
-          }
+          } else { throw err }
         }
       }
-
     } catch (err) {
-
-      addToast(
-        `Erro: ${err.message}`,
-        "error"
-      )
-
+      addToast(`Erro: ${err.message}`, "error")
     } finally {
-
       setSaving(false)
     }
   }
 
-  return (
-    <div>
-      {/* resto do componente */}
-    </div>
-  )
-}
+  async function handleDelete(id) {
+    try {
+      await deleteClient(id)
+      setClients(prev => prev.filter(c => c.id !== id))
+      addToast("Cliente removido.", "warning")
+    } catch (err) {
+      addToast(`Erro ao deletar: ${err.message}`, "error")
+    }
+    setConfirmId(null)
+  }
+
   const allOwners = useMemo(() => [...new Set(clients.map(c => c.projectOwner).filter(Boolean))], [clients])
   const allTags   = useMemo(() => [...new Set(clients.flatMap(c => c.tags || []))], [clients])
-  function toggleSort(field) { setSortBy(prev => { const [pf,pd] = prev.split("_"); if(pf===field) return `${field}_${pd==="asc"?"desc":"asc"}`; return `${field}_asc` }); setPage(1) }
+
+  function toggleSort(field) {
+    setSortBy(prev => {
+      const [pf, pd] = prev.split("_")
+      if (pf === field) return `${field}_${pd === "asc" ? "desc" : "asc"}`
+      return `${field}_asc`
+    })
+    setPage(1)
+  }
+
   const filtered = useMemo(() => {
-    const q = normalize(query); const vMin = valueMin!==""?Number(valueMin):null; const vMax = valueMax!==""?Number(valueMax):null
+    const q = normalize(query)
+    const vMin = valueMin !== "" ? Number(valueMin) : null
+    const vMax = valueMax !== "" ? Number(valueMax) : null
     let result = clients.filter(c => {
       if (q && !buildHaystack(c).includes(q)) return false
-      if (filterPayment!=="all" && (c.paymentStatus||"pendente")!==filterPayment) return false
-      if (filterProject!=="all" && (c.projectStatus||"andamento")!==filterProject) return false
-      if (filterOwner!=="all" && c.projectOwner!==filterOwner) return false
-      if (filterTag!=="all" && !(c.tags||[]).includes(filterTag)) return false
-      if (vMin!==null && c.projectValue<vMin) return false
-      if (vMax!==null && c.projectValue>vMax) return false
+      if (filterPayment !== "all" && (c.paymentStatus || "pendente") !== filterPayment) return false
+      if (filterProject !== "all" && (c.projectStatus || "andamento") !== filterProject) return false
+      if (filterOwner !== "all" && c.projectOwner !== filterOwner) return false
+      if (filterTag !== "all" && !(c.tags || []).includes(filterTag)) return false
+      if (vMin !== null && c.projectValue < vMin) return false
+      if (vMax !== null && c.projectValue > vMax) return false
       return true
     })
-    const [field,dir] = sortBy.split("_")
-    result.sort((a,b) => {
-      let va=a[field]??"", vb=b[field]??""
-      if(field==="projectValue"){va=Number(va);vb=Number(vb)}else{va=normalize(String(va));vb=normalize(String(vb))}
-      if(va<vb) return dir==="asc"?-1:1; if(va>vb) return dir==="asc"?1:-1; return 0
+    const [field, dir] = sortBy.split("_")
+    result.sort((a, b) => {
+      let va = a[field] ?? "", vb = b[field] ?? ""
+      if (field === "projectValue") { va = Number(va); vb = Number(vb) }
+      else { va = normalize(String(va)); vb = normalize(String(vb)) }
+      if (va < vb) return dir === "asc" ? -1 : 1
+      if (va > vb) return dir === "asc" ? 1 : -1
+      return 0
     })
     return result
   }, [clients, query, filterPayment, filterProject, filterOwner, filterTag, valueMin, valueMax, sortBy])
-  const paginated = useMemo(() => { const start=(page-1)*perPage; return filtered.slice(start,start+perPage) }, [filtered,page,perPage])
-  const hasFilters = rawQuery||filterPayment!=="all"||filterProject!=="all"||filterOwner!=="all"||filterTag!=="all"||valueMin!==""||valueMax!==""
-  const totalValue   = useMemo(()=>clients.reduce((s,c)=>s+c.projectValue,0),[clients])
-  const paidValue    = useMemo(()=>clients.filter(c=>c.paymentStatus==="pago").reduce((s,c)=>s+c.projectValue,0),[clients])
-  const pendingValue = useMemo(()=>clients.filter(c=>c.paymentStatus!=="pago").reduce((s,c)=>s+c.projectValue,0),[clients])
-  function openCreate() { setForm({ paymentStatus:"pendente", projectStatus:"andamento", projectProgress:PROGRESS_BY_STATUS["andamento"] }); setFormErrors({}); setEditingId(null); setShowForm(true) }
-  function openEdit(c) { setForm({...c}); setFormErrors({}); setEditingId(c.id); setShowForm(true) }
-  function closeForm() { setShowForm(false); setEditingId(null) }
-  function validateForm(f) {
-    const e = {}
-    if(!f.name?.trim()) e.name="Nome obrigatório"
-    if(!f.email?.trim()) e.email="Email obrigatório"
-    else if(!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(f.email)) e.email="Email inválido"
-    if(!f.phone?.trim()) e.phone="Telefone obrigatório"
-    if(!f.projectValue||Number(f.projectValue)<=0) e.projectValue="Valor deve ser > 0"
-    if(!f.paymentStatus) e.paymentStatus="Selecione"
-    if(!f.projectStatus) e.projectStatus="Selecione"
-    if(!f.startDate) e.startDate="Data obrigatória"
-    if(!f.endDate) e.endDate="Data obrigatória"
-    if(f.startDate&&f.endDate&&f.endDate<f.startDate) e.endDate="Deve ser após o início"
-    if(!f.projectName?.trim()) e.projectName="Nome do projeto obrigatório"
-    if(!f.projectOwner?.trim()) e.projectOwner="Responsável obrigatório"
-    return e
+
+  const paginated    = useMemo(() => { const start=(page-1)*perPage; return filtered.slice(start, start+perPage) }, [filtered, page, perPage])
+  const hasFilters   = rawQuery || filterPayment!=="all" || filterProject!=="all" || filterOwner!=="all" || filterTag!=="all" || valueMin!=="" || valueMax!==""
+  const totalValue   = useMemo(() => clients.reduce((s,c) => s+c.projectValue, 0), [clients])
+  const paidValue    = useMemo(() => clients.filter(c => c.paymentStatus==="pago").reduce((s,c) => s+c.projectValue, 0), [clients])
+  const pendingValue = useMemo(() => clients.filter(c => c.paymentStatus!=="pago").reduce((s,c) => s+c.projectValue, 0), [clients])
+
+  const inputStyle = {
+    background:"#161b2a", border:"1px solid rgba(255,255,255,.15)", borderRadius:7,
+    padding:"7px 10px", fontSize:12, color:"#e8eaf0", fontFamily:"inherit", outline:"none", width:"100%"
   }
-  async function handleSave(e) {
-    e.preventDefault(); const errs=validateForm(form); if(Object.keys(errs).length){setFormErrors(errs);return}; setSaving(true)
-    try {
-      const progress=Math.min(100,Math.max(0,Number(form.projectProgress)||0))
-      const clientData={...form,projectValue:Number(form.projectValue),projectProgress:progress}
-      if(editingId){const updated=await updateClient(editingId,clientData);setClients(prev=>prev.map(c=>c.id===editingId?updated:c));addToast("Cliente atualizado!","success")}
-      else{const newActivity=[{id:`a${Date.now()}`,type:"created",text:"Cliente criado",date:new Date().toISOString().split("T")[0],user:user.email}];const newClient=await createClient(user.id,{...clientData,kanbanCol:"backlog",tags:[],activities:newActivity});setClients(prev=>[newClient,...prev]);addToast("Cliente adicionado!","success")}
-      closeForm()
-    } catch(err){addToast(`Erro: ${err.message}`,"error")} finally{setSaving(false)}
-  }
-  function setF(k,v){setForm(p=>{const next={...p,[k]:v};if(k==="projectStatus"&&v in PROGRESS_BY_STATUS)next.projectProgress=PROGRESS_BY_STATUS[v];return next});setFormErrors(p=>({...p,[k]:""}))}
-  const inputStyle={background:"#161b2a",border:"1px solid rgba(255,255,255,.15)",borderRadius:7,padding:"7px 10px",fontSize:12,color:"#e8eaf0",fontFamily:"inherit",outline:"none",width:"100%"}
-  const chipStyle=active=>({padding:"4px 10px",borderRadius:20,fontSize:11,cursor:"pointer",border:"1px solid",fontFamily:"inherit",transition:"all .13s",borderColor:active?"#4f6ef7":"rgba(255,255,255,.1)",background:active?"#4f6ef7":"transparent",color:active?"#fff":"#8892a4"})
+  const chipStyle = active => ({
+    padding:"4px 10px", borderRadius:20, fontSize:11, cursor:"pointer", border:"1px solid",
+    fontFamily:"inherit", transition:"all .13s",
+    borderColor: active ? "#4f6ef7" : "rgba(255,255,255,.1)",
+    background:  active ? "#4f6ef7" : "transparent",
+    color:       active ? "#fff"    : "#8892a4",
+  })
+
   return (
     <div>
+      {/* SUMMARY CARDS */}
       <div style={{ display:"flex", gap:10, marginBottom:14, flexWrap:"wrap" }}>
-        {[{l:"Total faturado",v:formatCurrency(totalValue),c:"#e8eaf0"},{l:"Recebido",v:formatCurrency(paidValue),c:"#22c97d"},{l:"Pendente",v:formatCurrency(pendingValue),c:"#f59e0b"}].map(s=>(
-          <div key={s.l} style={{ background:"#111520",border:"1px solid rgba(255,255,255,.06)",borderRadius:10,padding:"10px 16px",flex:1,minWidth:130 }}>
-            <div style={{ fontSize:9,color:"#5a6478",textTransform:"uppercase",letterSpacing:".6px",fontFamily:"monospace",marginBottom:4 }}>{s.l}</div>
-            <div style={{ fontSize:17,fontWeight:700,color:s.c,fontFamily:"monospace",letterSpacing:"-.3px" }}>{s.v}</div>
+        {[
+          { l:"Total faturado", v:formatCurrency(totalValue),   c:"#e8eaf0" },
+          { l:"Recebido",       v:formatCurrency(paidValue),    c:"#22c97d" },
+          { l:"Pendente",       v:formatCurrency(pendingValue), c:"#f59e0b" },
+        ].map(s => (
+          <div key={s.l} style={{ background:"#111520", border:"1px solid rgba(255,255,255,.06)", borderRadius:10, padding:"10px 16px", flex:1, minWidth:130 }}>
+            <div style={{ fontSize:9, color:"#5a6478", textTransform:"uppercase", letterSpacing:".6px", fontFamily:"monospace", marginBottom:4 }}>{s.l}</div>
+            <div style={{ fontSize:17, fontWeight:700, color:s.c, fontFamily:"monospace", letterSpacing:"-.3px" }}>{s.v}</div>
           </div>
         ))}
       </div>
-      <div style={{ display:"flex",gap:8,marginBottom:12,alignItems:"center",flexWrap:"wrap" }}>
-        <div style={{ display:"flex",alignItems:"center",gap:8,background:"#161b2a",border:"1px solid rgba(255,255,255,.08)",borderRadius:7,padding:"6px 10px",flex:1,minWidth:200 }}>
+
+      {/* SEARCH + ACTIONS */}
+      <div style={{ display:"flex", gap:8, marginBottom:12, alignItems:"center", flexWrap:"wrap" }}>
+        <div style={{ display:"flex", alignItems:"center", gap:8, background:"#161b2a", border:"1px solid rgba(255,255,255,.08)", borderRadius:7, padding:"6px 10px", flex:1, minWidth:200 }}>
           <Icon d="M21 21l-4.35-4.35M17 11A6 6 0 1 1 5 11a6 6 0 0 1 12 0z" size={13}/>
-          <input value={rawQuery} onChange={e=>{setRawQuery(e.target.value);setPage(1)}} placeholder="Buscar por nome, email, empresa, ID, telefone, valor, tag…"
-            style={{ background:"none",border:"none",outline:"none",fontSize:12,color:"#e8eaf0",fontFamily:"inherit",width:"100%" }}/>
-          {rawQuery&&<button onClick={()=>setRawQuery("")} style={{ background:"none",border:"none",cursor:"pointer",color:"#5a6478",fontSize:16,lineHeight:1 }}>×</button>}
+          <input value={rawQuery} onChange={e => { setRawQuery(e.target.value); setPage(1) }}
+            placeholder="Buscar por nome, email, empresa, ID, telefone, valor, tag…"
+            style={{ background:"none", border:"none", outline:"none", fontSize:12, color:"#e8eaf0", fontFamily:"inherit", width:"100%" }}/>
+          {rawQuery && <button onClick={() => setRawQuery("")} style={{ background:"none", border:"none", cursor:"pointer", color:"#5a6478", fontSize:16, lineHeight:1 }}>×</button>}
         </div>
-        <button onClick={()=>setShowAdvanced(v=>!v)} style={{ padding:"7px 12px",borderRadius:7,fontSize:11,cursor:"pointer",fontFamily:"inherit",border:"1px solid rgba(255,255,255,.1)",background:showAdvanced?"rgba(79,110,247,.15)":"transparent",color:showAdvanced?"#4f6ef7":"#8892a4" }}>
-          Filtros {showAdvanced?"▲":"▼"}
+        <button onClick={() => setShowAdvanced(v => !v)}
+          style={{ padding:"7px 12px", borderRadius:7, fontSize:11, cursor:"pointer", fontFamily:"inherit",
+            border:"1px solid rgba(255,255,255,.1)",
+            background: showAdvanced ? "rgba(79,110,247,.15)" : "transparent",
+            color:      showAdvanced ? "#4f6ef7"              : "#8892a4" }}>
+          Filtros {showAdvanced ? "▲" : "▼"}
         </button>
-        <button onClick={openCreate} style={{ display:"flex",alignItems:"center",gap:6,padding:"7px 14px",borderRadius:7,background:"#4f6ef7",border:"none",color:"#fff",fontSize:12,fontWeight:500,cursor:"pointer",fontFamily:"inherit",flexShrink:0 }}>
+        <button onClick={openCreate}
+          style={{ display:"flex", alignItems:"center", gap:6, padding:"7px 14px", borderRadius:7,
+            background:"#4f6ef7", border:"none", color:"#fff", fontSize:12, fontWeight:500, cursor:"pointer", fontFamily:"inherit", flexShrink:0 }}>
           + Novo cliente
         </button>
       </div>
-      <div style={{ display:"flex",gap:6,marginBottom:showAdvanced?8:14,flexWrap:"wrap",alignItems:"center" }}>
-        <span style={{ fontSize:10,color:"#5a6478",fontFamily:"monospace" }}>PAGAMENTO:</span>
-        {[["all","Todos"],["pendente","Pendente"],["pago","Pago"],["atrasado","Atrasado"]].map(([v,l])=>(
-          <button key={v} style={chipStyle(filterPayment===v)} onClick={()=>{setFilterPayment(v);setPage(1)}}>{l}</button>
+
+      {/* QUICK FILTERS */}
+      <div style={{ display:"flex", gap:6, marginBottom: showAdvanced ? 8 : 14, flexWrap:"wrap", alignItems:"center" }}>
+        <span style={{ fontSize:10, color:"#5a6478", fontFamily:"monospace" }}>PAGAMENTO:</span>
+        {[["all","Todos"],["pendente","Pendente"],["pago","Pago"],["atrasado","Atrasado"]].map(([v,l]) => (
+          <button key={v} style={chipStyle(filterPayment===v)} onClick={() => { setFilterPayment(v); setPage(1) }}>{l}</button>
         ))}
-        <span style={{ fontSize:10,color:"#5a6478",fontFamily:"monospace",marginLeft:8 }}>PROJETO:</span>
-        {[["all","Todos"],["andamento","Em andamento"],["concluido","Concluído"],["cancelado","Cancelado"]].map(([v,l])=>(
-          <button key={v} style={chipStyle(filterProject===v)} onClick={()=>{setFilterProject(v);setPage(1)}}>{l}</button>
+        <span style={{ fontSize:10, color:"#5a6478", fontFamily:"monospace", marginLeft:8 }}>PROJETO:</span>
+        {[["all","Todos"],["andamento","Em andamento"],["concluido","Concluído"],["cancelado","Cancelado"]].map(([v,l]) => (
+          <button key={v} style={chipStyle(filterProject===v)} onClick={() => { setFilterProject(v); setPage(1) }}>{l}</button>
         ))}
-        {hasFilters&&<button onClick={()=>{setRawQuery("");setFilterPayment("all");setFilterProject("all");setFilterOwner("all");setFilterTag("all");setValueMin("");setValueMax("");setPage(1)}} style={{ ...chipStyle(false),borderColor:"rgba(239,68,68,.3)",color:"#ef4444",marginLeft:8 }}>✕ Limpar filtros</button>}
+        {hasFilters && (
+          <button onClick={() => { setRawQuery(""); setFilterPayment("all"); setFilterProject("all"); setFilterOwner("all"); setFilterTag("all"); setValueMin(""); setValueMax(""); setPage(1) }}
+            style={{ ...chipStyle(false), borderColor:"rgba(239,68,68,.3)", color:"#ef4444", marginLeft:8 }}>
+            ✕ Limpar filtros
+          </button>
+        )}
       </div>
+
+      {/* ADVANCED FILTERS */}
       <AnimatePresence>
-        {showAdvanced&&(
-          <motion.div initial={{height:0,opacity:0}} animate={{height:"auto",opacity:1}} exit={{height:0,opacity:0}} transition={{duration:.18}} style={{overflow:"hidden",marginBottom:14}}>
-            <div style={{background:"#111520",border:"1px solid rgba(255,255,255,.06)",borderRadius:10,padding:"14px 16px",display:"grid",gridTemplateColumns:"repeat(4,1fr)",gap:12}}>
-              {[{l:"Responsável",val:filterOwner,set:setFilterOwner,opts:[["all","Todos"],...allOwners.map(o=>[o,o])]},{l:"Tag",val:filterTag,set:setFilterTag,opts:[["all","Todas"],...allTags.map(t=>[t,t])]}].map(f=>(
+        {showAdvanced && (
+          <motion.div initial={{ height:0, opacity:0 }} animate={{ height:"auto", opacity:1 }}
+            exit={{ height:0, opacity:0 }} transition={{ duration:.18 }} style={{ overflow:"hidden", marginBottom:14 }}>
+            <div style={{ background:"#111520", border:"1px solid rgba(255,255,255,.06)", borderRadius:10, padding:"14px 16px",
+              display:"grid", gridTemplateColumns:"repeat(4,1fr)", gap:12 }}>
+              {[
+                { l:"Responsável", val:filterOwner, set:setFilterOwner, opts:[["all","Todos"], ...allOwners.map(o => [o,o])] },
+                { l:"Tag",         val:filterTag,   set:setFilterTag,   opts:[["all","Todas"], ...allTags.map(t => [t,t])]   },
+              ].map(f => (
                 <div key={f.l}>
-                  <div style={{fontSize:9,color:"#5a6478",fontFamily:"monospace",textTransform:"uppercase",letterSpacing:".5px",marginBottom:6}}>{f.l}</div>
-                  <select value={f.val} onChange={e=>{f.set(e.target.value);setPage(1)}} style={{...inputStyle,cursor:"pointer"}}>
-                    {f.opts.map(([v,l])=><option key={v} value={v}>{l}</option>)}
+                  <div style={{ fontSize:9, color:"#5a6478", fontFamily:"monospace", textTransform:"uppercase", letterSpacing:".5px", marginBottom:6 }}>{f.l}</div>
+                  <select value={f.val} onChange={e => { f.set(e.target.value); setPage(1) }} style={{ ...inputStyle, cursor:"pointer" }}>
+                    {f.opts.map(([v,l]) => <option key={v} value={v}>{l}</option>)}
                   </select>
                 </div>
               ))}
-              {[{l:"Valor mínimo (R$)",val:valueMin,set:setValueMin,ph:"0"},{l:"Valor máximo (R$)",val:valueMax,set:setValueMax,ph:"∞"}].map(f=>(
+              {[
+                { l:"Valor mínimo (R$)", val:valueMin, set:setValueMin, ph:"0" },
+                { l:"Valor máximo (R$)", val:valueMax, set:setValueMax, ph:"∞" },
+              ].map(f => (
                 <div key={f.l}>
-                  <div style={{fontSize:9,color:"#5a6478",fontFamily:"monospace",textTransform:"uppercase",letterSpacing:".5px",marginBottom:6}}>{f.l}</div>
-                  <input type="number" min="0" value={f.val} onChange={e=>{f.set(e.target.value);setPage(1)}} placeholder={f.ph} style={inputStyle}/>
+                  <div style={{ fontSize:9, color:"#5a6478", fontFamily:"monospace", textTransform:"uppercase", letterSpacing:".5px", marginBottom:6 }}>{f.l}</div>
+                  <input type="number" min="0" value={f.val} onChange={e => { f.set(e.target.value); setPage(1) }} placeholder={f.ph} style={inputStyle}/>
                 </div>
               ))}
             </div>
           </motion.div>
         )}
       </AnimatePresence>
+
+      {/* FORM MODAL */}
       <AnimatePresence>
-        {showForm&&(
-          <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,.6)",zIndex:1000,display:"flex",alignItems:"center",justifyContent:"center",padding:20,backdropFilter:"blur(4px)"}} onClick={closeForm}>
-            <motion.div initial={{scale:.93,opacity:0,y:10}} animate={{scale:1,opacity:1,y:0}} exit={{scale:.93,opacity:0}} transition={{duration:.18}} onClick={e=>e.stopPropagation()}
-              style={{background:"#111520",border:"1px solid rgba(255,255,255,.1)",borderRadius:16,width:"100%",maxWidth:600,maxHeight:"90vh",overflowY:"auto",boxShadow:"0 20px 60px rgba(0,0,0,.5)"}}>
-              <div style={{padding:"20px 24px 0",display:"flex",alignItems:"center",justifyContent:"space-between"}}>
-                <div style={{fontSize:16,fontWeight:600,color:"#e8eaf0"}}>{editingId?"✏️ Editar cliente":"➕ Novo cliente"}</div>
-                <button onClick={closeForm} style={{background:"none",border:"1px solid rgba(255,255,255,.1)",borderRadius:7,color:"#8892a4",cursor:"pointer",width:30,height:30,display:"flex",alignItems:"center",justifyContent:"center",fontSize:18}}>×</button>
+        {showForm && (
+          <div style={{ position:"fixed", inset:0, background:"rgba(0,0,0,.6)", zIndex:1000,
+            display:"flex", alignItems:"center", justifyContent:"center", padding:20, backdropFilter:"blur(4px)" }}
+            onClick={closeForm}>
+            <motion.div initial={{ scale:.93, opacity:0, y:10 }} animate={{ scale:1, opacity:1, y:0 }}
+              exit={{ scale:.93, opacity:0 }} transition={{ duration:.18 }}
+              onClick={e => e.stopPropagation()}
+              style={{ background:"#111520", border:"1px solid rgba(255,255,255,.1)", borderRadius:16,
+                width:"100%", maxWidth:600, maxHeight:"90vh", overflowY:"auto", boxShadow:"0 20px 60px rgba(0,0,0,.5)" }}>
+              <div style={{ padding:"20px 24px 0", display:"flex", alignItems:"center", justifyContent:"space-between" }}>
+                <div style={{ fontSize:16, fontWeight:600, color:"#e8eaf0" }}>{editingId ? "✏️ Editar cliente" : "➕ Novo cliente"}</div>
+                <button onClick={closeForm} style={{ background:"none", border:"1px solid rgba(255,255,255,.1)", borderRadius:7, color:"#8892a4", cursor:"pointer", width:30, height:30, display:"flex", alignItems:"center", justifyContent:"center", fontSize:18 }}>×</button>
               </div>
-              <form onSubmit={handleSave} noValidate style={{padding:"20px 24px 24px"}}>
-                {editingId&&<div style={{marginBottom:14,padding:"8px 12px",background:"#161b2a",borderRadius:7,border:"1px solid rgba(255,255,255,.07)"}}><span style={{fontSize:9,color:"#5a6478",fontFamily:"monospace",textTransform:"uppercase",letterSpacing:".5px"}}>ID: </span><span style={{fontSize:11,color:"#5a6478",fontFamily:"monospace"}}>{editingId}</span></div>}
-                <div style={{fontSize:9,color:"#5a6478",textTransform:"uppercase",letterSpacing:".7px",fontFamily:"monospace",marginBottom:10,paddingBottom:8,borderBottom:"1px solid rgba(255,255,255,.06)"}}>Dados do contato</div>
-                <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:12,marginBottom:16}}>
-                  {[{k:"name",l:"Nome *",t:"text",ph:"Ana Souza"},{k:"email",l:"Email *",t:"email",ph:"ana@empresa.com"},{k:"phone",l:"Telefone *",t:"text",ph:"(11) 99999-0000"},{k:"company",l:"Empresa",t:"text",ph:"Empresa Ltda"}].map(({k,l,t,ph})=>(
+              <form onSubmit={handleSave} noValidate style={{ padding:"20px 24px 24px" }}>
+                {editingId && (
+                  <div style={{ marginBottom:14, padding:"8px 12px", background:"#161b2a", borderRadius:7, border:"1px solid rgba(255,255,255,.07)" }}>
+                    <span style={{ fontSize:9, color:"#5a6478", fontFamily:"monospace", textTransform:"uppercase", letterSpacing:".5px" }}>ID: </span>
+                    <span style={{ fontSize:11, color:"#5a6478", fontFamily:"monospace" }}>{editingId}</span>
+                  </div>
+                )}
+
+                {/* CONTACT */}
+                <div style={{ fontSize:9, color:"#5a6478", textTransform:"uppercase", letterSpacing:".7px", fontFamily:"monospace", marginBottom:10, paddingBottom:8, borderBottom:"1px solid rgba(255,255,255,.06)" }}>Dados do contato</div>
+                <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:12, marginBottom:16 }}>
+                  {[
+                    { k:"name",    l:"Nome *",     t:"text",  ph:"Ana Souza"        },
+                    { k:"email",   l:"Email *",    t:"email", ph:"ana@empresa.com"  },
+                    { k:"phone",   l:"Telefone *", t:"text",  ph:"(11) 99999-0000"  },
+                    { k:"company", l:"Empresa",    t:"text",  ph:"Empresa Ltda"     },
+                  ].map(({ k,l,t,ph }) => (
                     <div key={k}>
-                      <div style={{fontSize:9,color:"#5a6478",fontFamily:"monospace",textTransform:"uppercase",letterSpacing:".5px",marginBottom:5}}>{l}</div>
-                      <input type={t} value={form[k]||""} onChange={e=>setF(k,e.target.value)} placeholder={ph} style={{...inputStyle,borderColor:formErrors[k]?"#ef4444":"rgba(255,255,255,.15)"}}/>
-                      {formErrors[k]&&<div style={{fontSize:10,color:"#ef4444",marginTop:3}}>{formErrors[k]}</div>}
+                      <div style={{ fontSize:9, color:"#5a6478", fontFamily:"monospace", textTransform:"uppercase", letterSpacing:".5px", marginBottom:5 }}>{l}</div>
+                      <input type={t} value={form[k]||""} onChange={e => setF(k, e.target.value)} placeholder={ph}
+                        style={{ ...inputStyle, borderColor: formErrors[k] ? "#ef4444" : "rgba(255,255,255,.15)" }}/>
+                      {formErrors[k] && <div style={{ fontSize:10, color:"#ef4444", marginTop:3 }}>{formErrors[k]}</div>}
                     </div>
                   ))}
                 </div>
-                <div style={{fontSize:9,color:"#5a6478",textTransform:"uppercase",letterSpacing:".7px",fontFamily:"monospace",marginBottom:10,paddingBottom:8,borderBottom:"1px solid rgba(255,255,255,.06)"}}>Dados do projeto</div>
-                <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:12,marginBottom:12}}>
-                  {[{k:"projectName",l:"Nome do projeto *",t:"text",ph:"Ex: Redesign Site"},{k:"projectOwner",l:"Responsável *",t:"text",ph:"Ex: Mariana A."}].map(({k,l,t,ph})=>(
-                    <div key={k}><div style={{fontSize:9,color:"#5a6478",fontFamily:"monospace",textTransform:"uppercase",letterSpacing:".5px",marginBottom:5}}>{l}</div><input type={t} value={form[k]||""} onChange={e=>setF(k,e.target.value)} placeholder={ph} style={{...inputStyle,borderColor:formErrors[k]?"#ef4444":"rgba(255,255,255,.15)"}}/>{formErrors[k]&&<div style={{fontSize:10,color:"#ef4444",marginTop:3}}>{formErrors[k]}</div>}</div>
+
+                {/* PROJECT */}
+                <div style={{ fontSize:9, color:"#5a6478", textTransform:"uppercase", letterSpacing:".7px", fontFamily:"monospace", marginBottom:10, paddingBottom:8, borderBottom:"1px solid rgba(255,255,255,.06)" }}>Dados do projeto</div>
+                <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:12, marginBottom:12 }}>
+                  {[
+                    { k:"projectName",  l:"Nome do projeto *", t:"text", ph:"Ex: Redesign Site" },
+                    { k:"projectOwner", l:"Responsável *",      t:"text", ph:"Ex: Mariana A."    },
+                  ].map(({ k,l,t,ph }) => (
+                    <div key={k}>
+                      <div style={{ fontSize:9, color:"#5a6478", fontFamily:"monospace", textTransform:"uppercase", letterSpacing:".5px", marginBottom:5 }}>{l}</div>
+                      <input type={t} value={form[k]||""} onChange={e => setF(k, e.target.value)} placeholder={ph}
+                        style={{ ...inputStyle, borderColor: formErrors[k] ? "#ef4444" : "rgba(255,255,255,.15)" }}/>
+                      {formErrors[k] && <div style={{ fontSize:10, color:"#ef4444", marginTop:3 }}>{formErrors[k]}</div>}
+                    </div>
                   ))}
-                  <div><div style={{fontSize:9,color:"#5a6478",fontFamily:"monospace",textTransform:"uppercase",letterSpacing:".5px",marginBottom:5}}>Valor (R$) *</div><input type="number" min="0" step="0.01" value={form.projectValue||""} onChange={e=>setF("projectValue",e.target.value)} placeholder="0,00" style={{...inputStyle,borderColor:formErrors.projectValue?"#ef4444":"rgba(255,255,255,.15)"}}/>{formErrors.projectValue&&<div style={{fontSize:10,color:"#ef4444",marginTop:3}}>{formErrors.projectValue}</div>}</div>
-                  <div><div style={{fontSize:9,color:"#5a6478",fontFamily:"monospace",textTransform:"uppercase",letterSpacing:".5px",marginBottom:5}}>Status pagamento *</div><select value={form.paymentStatus||""} onChange={e=>setF("paymentStatus",e.target.value)} style={{...inputStyle,borderColor:formErrors.paymentStatus?"#ef4444":"rgba(255,255,255,.15)",cursor:"pointer",appearance:"none"}}><option value="">Selecione…</option>{Object.entries(PAYMENT_STATUS).map(([v,s])=><option key={v} value={v}>{s.label}</option>)}</select>{formErrors.paymentStatus&&<div style={{fontSize:10,color:"#ef4444",marginTop:3}}>{formErrors.paymentStatus}</div>}</div>
-                  <div><div style={{fontSize:9,color:"#5a6478",fontFamily:"monospace",textTransform:"uppercase",letterSpacing:".5px",marginBottom:5}}>Status projeto *</div><select value={form.projectStatus||""} onChange={e=>setF("projectStatus",e.target.value)} style={{...inputStyle,borderColor:formErrors.projectStatus?"#ef4444":"rgba(255,255,255,.15)",cursor:"pointer",appearance:"none"}}><option value="">Selecione…</option>{Object.entries(PROJECT_STATUS).map(([v,s])=><option key={v} value={v}>{s.label}</option>)}</select>{formErrors.projectStatus&&<div style={{fontSize:10,color:"#ef4444",marginTop:3}}>{formErrors.projectStatus}</div>}</div>
-                  <div><div style={{fontSize:9,color:"#5a6478",fontFamily:"monospace",textTransform:"uppercase",letterSpacing:".5px",marginBottom:5}}>Progresso (%) <span style={{color:"#3a4255"}}>— manual</span></div><input type="number" min="0" max="100" value={form.projectProgress??""} onChange={e=>setF("projectProgress",e.target.value)} placeholder="0–100" style={inputStyle}/>{form.projectProgress!==undefined&&<div style={{marginTop:6,height:4,background:"#1c2236",borderRadius:4,overflow:"hidden"}}><div style={{height:"100%",borderRadius:4,width:`${Math.min(100,Math.max(0,Number(form.projectProgress)||0))}%`,background:progressBarColor(form.projectStatus)}}/></div>}</div>
-                  <div><div style={{fontSize:9,color:"#5a6478",fontFamily:"monospace",textTransform:"uppercase",letterSpacing:".5px",marginBottom:5}}>Data início *</div><input type="date" value={form.startDate||""} onChange={e=>setF("startDate",e.target.value)} style={{...inputStyle,borderColor:formErrors.startDate?"#ef4444":"rgba(255,255,255,.15)",colorScheme:"dark"}}/>{formErrors.startDate&&<div style={{fontSize:10,color:"#ef4444",marginTop:3}}>{formErrors.startDate}</div>}</div>
-                  <div><div style={{fontSize:9,color:"#5a6478",fontFamily:"monospace",textTransform:"uppercase",letterSpacing:".5px",marginBottom:5}}>Data entrega *</div><input type="date" value={form.endDate||""} onChange={e=>setF("endDate",e.target.value)} style={{...inputStyle,borderColor:formErrors.endDate?"#ef4444":"rgba(255,255,255,.15)",colorScheme:"dark"}}/>{formErrors.endDate&&<div style={{fontSize:10,color:"#ef4444",marginTop:3}}>{formErrors.endDate}</div>}</div>
-                  <div style={{gridColumn:"1/-1"}}><div style={{fontSize:9,color:"#5a6478",fontFamily:"monospace",textTransform:"uppercase",letterSpacing:".5px",marginBottom:5}}>Observações</div><input type="text" value={form.notes||""} onChange={e=>setF("notes",e.target.value)} placeholder="Detalhes…" style={inputStyle}/></div>
+
+                  <div>
+                    <div style={{ fontSize:9, color:"#5a6478", fontFamily:"monospace", textTransform:"uppercase", letterSpacing:".5px", marginBottom:5 }}>Valor (R$) *</div>
+                    <input type="number" min="0" step="0.01" value={form.projectValue||""} onChange={e => setF("projectValue", e.target.value)} placeholder="0,00"
+                      style={{ ...inputStyle, borderColor: formErrors.projectValue ? "#ef4444" : "rgba(255,255,255,.15)" }}/>
+                    {formErrors.projectValue && <div style={{ fontSize:10, color:"#ef4444", marginTop:3 }}>{formErrors.projectValue}</div>}
+                  </div>
+
+                  <div>
+                    <div style={{ fontSize:9, color:"#5a6478", fontFamily:"monospace", textTransform:"uppercase", letterSpacing:".5px", marginBottom:5 }}>Status pagamento *</div>
+                    <select value={form.paymentStatus||""} onChange={e => setF("paymentStatus", e.target.value)}
+                      style={{ ...inputStyle, borderColor: formErrors.paymentStatus ? "#ef4444" : "rgba(255,255,255,.15)", cursor:"pointer", appearance:"none" }}>
+                      <option value="">Selecione…</option>
+                      {Object.entries(PAYMENT_STATUS).map(([v,s]) => <option key={v} value={v}>{s.label}</option>)}
+                    </select>
+                    {formErrors.paymentStatus && <div style={{ fontSize:10, color:"#ef4444", marginTop:3 }}>{formErrors.paymentStatus}</div>}
+                  </div>
+
+                  <div>
+                    <div style={{ fontSize:9, color:"#5a6478", fontFamily:"monospace", textTransform:"uppercase", letterSpacing:".5px", marginBottom:5 }}>Status projeto *</div>
+                    <select value={form.projectStatus||""} onChange={e => setF("projectStatus", e.target.value)}
+                      style={{ ...inputStyle, borderColor: formErrors.projectStatus ? "#ef4444" : "rgba(255,255,255,.15)", cursor:"pointer", appearance:"none" }}>
+                      <option value="">Selecione…</option>
+                      {Object.entries(PROJECT_STATUS).map(([v,s]) => <option key={v} value={v}>{s.label}</option>)}
+                    </select>
+                    {formErrors.projectStatus && <div style={{ fontSize:10, color:"#ef4444", marginTop:3 }}>{formErrors.projectStatus}</div>}
+                  </div>
+
+                  <div>
+                    <div style={{ fontSize:9, color:"#5a6478", fontFamily:"monospace", textTransform:"uppercase", letterSpacing:".5px", marginBottom:5 }}>
+                      Progresso (%) <span style={{ color:"#3a4255" }}>— manual</span>
+                    </div>
+                    <input type="number" min="0" max="100" value={form.projectProgress??""} onChange={e => setF("projectProgress", e.target.value)} placeholder="0–100" style={inputStyle}/>
+                    {form.projectProgress !== undefined && (
+                      <div style={{ marginTop:6, height:4, background:"#1c2236", borderRadius:4, overflow:"hidden" }}>
+                        <div style={{ height:"100%", borderRadius:4, width:`${Math.min(100,Math.max(0,Number(form.projectProgress)||0))}%`, background: progressBarColor(form.projectStatus) }}/>
+                      </div>
+                    )}
+                  </div>
+
+                  <div>
+                    <div style={{ fontSize:9, color:"#5a6478", fontFamily:"monospace", textTransform:"uppercase", letterSpacing:".5px", marginBottom:5 }}>Data início *</div>
+                    <input type="date" value={form.startDate||""} onChange={e => setF("startDate", e.target.value)}
+                      style={{ ...inputStyle, borderColor: formErrors.startDate ? "#ef4444" : "rgba(255,255,255,.15)", colorScheme:"dark" }}/>
+                    {formErrors.startDate && <div style={{ fontSize:10, color:"#ef4444", marginTop:3 }}>{formErrors.startDate}</div>}
+                  </div>
+
+                  <div>
+                    <div style={{ fontSize:9, color:"#5a6478", fontFamily:"monospace", textTransform:"uppercase", letterSpacing:".5px", marginBottom:5 }}>Data entrega *</div>
+                    <input type="date" value={form.endDate||""} onChange={e => setF("endDate", e.target.value)}
+                      style={{ ...inputStyle, borderColor: formErrors.endDate ? "#ef4444" : "rgba(255,255,255,.15)", colorScheme:"dark" }}/>
+                    {formErrors.endDate && <div style={{ fontSize:10, color:"#ef4444", marginTop:3 }}>{formErrors.endDate}</div>}
+                  </div>
+
+                  <div style={{ gridColumn:"1/-1" }}>
+                    <div style={{ fontSize:9, color:"#5a6478", fontFamily:"monospace", textTransform:"uppercase", letterSpacing:".5px", marginBottom:5 }}>Observações</div>
+                    <input type="text" value={form.notes||""} onChange={e => setF("notes", e.target.value)} placeholder="Detalhes…" style={inputStyle}/>
+                  </div>
                 </div>
-                <div style={{display:"flex",gap:8,justifyContent:"flex-end",paddingTop:16,borderTop:"1px solid rgba(255,255,255,.06)"}}>
-                  <button type="button" onClick={closeForm} disabled={saving} style={{padding:"7px 16px",borderRadius:7,background:"rgba(255,255,255,.04)",border:"1px solid rgba(255,255,255,.1)",color:"#8892a4",fontSize:12,cursor:"pointer",fontFamily:"inherit"}}>Cancelar</button>
-                  <button type="submit" disabled={saving} style={{padding:"7px 16px",borderRadius:7,background:"#4f6ef7",border:"none",color:"#fff",fontSize:12,fontWeight:500,cursor:"pointer",fontFamily:"inherit",display:"flex",alignItems:"center",gap:6}}>
-                    {saving&&<div style={{width:12,height:12,borderRadius:"50%",border:"2px solid rgba(255,255,255,.3)",borderTopColor:"#fff",animation:"spin .6s linear infinite"}}/>}
-                    {saving?"Salvando…":editingId?"Salvar alterações":"Adicionar cliente"}
+
+                <div style={{ display:"flex", gap:8, justifyContent:"flex-end", paddingTop:16, borderTop:"1px solid rgba(255,255,255,.06)" }}>
+                  <button type="button" onClick={closeForm} disabled={saving}
+                    style={{ padding:"7px 16px", borderRadius:7, background:"rgba(255,255,255,.04)", border:"1px solid rgba(255,255,255,.1)", color:"#8892a4", fontSize:12, cursor:"pointer", fontFamily:"inherit" }}>
+                    Cancelar
+                  </button>
+                  <button type="submit" disabled={saving}
+                    style={{ padding:"7px 16px", borderRadius:7, background:"#4f6ef7", border:"none", color:"#fff", fontSize:12, fontWeight:500, cursor:"pointer", fontFamily:"inherit", display:"flex", alignItems:"center", gap:6 }}>
+                    {saving && <div style={{ width:12, height:12, borderRadius:"50%", border:"2px solid rgba(255,255,255,.3)", borderTopColor:"#fff", animation:"spin .6s linear infinite" }}/>}
+                    {saving ? "Salvando…" : editingId ? "Salvar alterações" : "Adicionar cliente"}
                   </button>
                 </div>
               </form>
@@ -1278,82 +1348,130 @@ function ClientsView({ clients, setClients, addToast, openClientModal, user, dat
           </div>
         )}
       </AnimatePresence>
+
+      {/* DELETE CONFIRM */}
       <AnimatePresence>
-        {confirmId&&(
-          <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,.6)",zIndex:1000,display:"flex",alignItems:"center",justifyContent:"center",backdropFilter:"blur(4px)"}} onClick={()=>setConfirmId(null)}>
-            <motion.div initial={{scale:.9,opacity:0}} animate={{scale:1,opacity:1}} exit={{scale:.9,opacity:0}} transition={{duration:.16}} onClick={e=>e.stopPropagation()}
-              style={{background:"#111520",border:"1px solid rgba(255,255,255,.1)",borderRadius:14,padding:28,maxWidth:360,width:"100%",textAlign:"center",boxShadow:"0 20px 60px rgba(0,0,0,.5)"}}>
-              <div style={{fontSize:36,marginBottom:12}}>🗑</div>
-              <div style={{fontSize:16,fontWeight:600,color:"#e8eaf0",marginBottom:8}}>Deletar cliente?</div>
-              <div style={{fontSize:12,color:"#8892a4",marginBottom:24,lineHeight:1.6}}>Esta ação não pode ser desfeita.<br/>O cliente será removido permanentemente.</div>
-              <div style={{display:"flex",gap:10,justifyContent:"center"}}>
-                <button onClick={()=>setConfirmId(null)} style={{padding:"8px 20px",borderRadius:8,background:"rgba(255,255,255,.04)",border:"1px solid rgba(255,255,255,.1)",color:"#8892a4",fontSize:12,cursor:"pointer",fontFamily:"inherit"}}>Cancelar</button>
-                <button onClick={()=>handleDelete(confirmId)} style={{padding:"8px 20px",borderRadius:8,background:"rgba(239,68,68,.15)",border:"1px solid rgba(239,68,68,.3)",color:"#ef4444",fontSize:12,fontWeight:600,cursor:"pointer",fontFamily:"inherit"}}>Deletar</button>
+        {confirmId && (
+          <div style={{ position:"fixed", inset:0, background:"rgba(0,0,0,.6)", zIndex:1000,
+            display:"flex", alignItems:"center", justifyContent:"center", backdropFilter:"blur(4px)" }}
+            onClick={() => setConfirmId(null)}>
+            <motion.div initial={{ scale:.9, opacity:0 }} animate={{ scale:1, opacity:1 }}
+              exit={{ scale:.9, opacity:0 }} transition={{ duration:.16 }}
+              onClick={e => e.stopPropagation()}
+              style={{ background:"#111520", border:"1px solid rgba(255,255,255,.1)", borderRadius:14,
+                padding:28, maxWidth:360, width:"100%", textAlign:"center", boxShadow:"0 20px 60px rgba(0,0,0,.5)" }}>
+              <div style={{ fontSize:36, marginBottom:12 }}>🗑</div>
+              <div style={{ fontSize:16, fontWeight:600, color:"#e8eaf0", marginBottom:8 }}>Deletar cliente?</div>
+              <div style={{ fontSize:12, color:"#8892a4", marginBottom:24, lineHeight:1.6 }}>
+                Esta ação não pode ser desfeita.<br/>O cliente será removido permanentemente.
+              </div>
+              <div style={{ display:"flex", gap:10, justifyContent:"center" }}>
+                <button onClick={() => setConfirmId(null)}
+                  style={{ padding:"8px 20px", borderRadius:8, background:"rgba(255,255,255,.04)", border:"1px solid rgba(255,255,255,.1)", color:"#8892a4", fontSize:12, cursor:"pointer", fontFamily:"inherit" }}>Cancelar</button>
+                <button onClick={() => handleDelete(confirmId)}
+                  style={{ padding:"8px 20px", borderRadius:8, background:"rgba(239,68,68,.15)", border:"1px solid rgba(239,68,68,.3)", color:"#ef4444", fontSize:12, fontWeight:600, cursor:"pointer", fontFamily:"inherit" }}>Deletar</button>
               </div>
             </motion.div>
           </div>
         )}
       </AnimatePresence>
-      <div style={{background:"#111520",border:"1px solid rgba(255,255,255,.06)",borderRadius:12,overflow:"hidden"}}>
-        <table style={{width:"100%",borderCollapse:"collapse"}}>
-          <thead><tr>
-            <th style={{padding:"10px 14px",textAlign:"left",fontSize:9,fontWeight:600,textTransform:"uppercase",letterSpacing:".8px",color:"#5a6478",fontFamily:"monospace",borderBottom:"1px solid rgba(255,255,255,.05)"}}>ID</th>
-            <SortTh label="Nome" field="name" sortBy={sortBy} onSort={toggleSort}/>
-            <SortTh label="Empresa" field="company" sortBy={sortBy} onSort={toggleSort}/>
-            <th style={{padding:"10px 14px",textAlign:"left",fontSize:9,fontWeight:600,textTransform:"uppercase",letterSpacing:".8px",color:"#5a6478",fontFamily:"monospace",borderBottom:"1px solid rgba(255,255,255,.05)"}}>Email</th>
-            <th style={{padding:"10px 14px",textAlign:"left",fontSize:9,fontWeight:600,textTransform:"uppercase",letterSpacing:".8px",color:"#5a6478",fontFamily:"monospace",borderBottom:"1px solid rgba(255,255,255,.05)"}}>Pagamento</th>
-            <th style={{padding:"10px 14px",textAlign:"left",fontSize:9,fontWeight:600,textTransform:"uppercase",letterSpacing:".8px",color:"#5a6478",fontFamily:"monospace",borderBottom:"1px solid rgba(255,255,255,.05)"}}>Projeto</th>
-            <SortTh label="Valor" field="projectValue" sortBy={sortBy} onSort={toggleSort}/>
-            <SortTh label="Entrega" field="endDate" sortBy={sortBy} onSort={toggleSort}/>
-            <th style={{padding:"10px 14px",borderBottom:"1px solid rgba(255,255,255,.05)"}}/>
-          </tr></thead>
+
+      {/* TABLE */}
+      <div style={{ background:"#111520", border:"1px solid rgba(255,255,255,.06)", borderRadius:12, overflow:"hidden" }}>
+        <table style={{ width:"100%", borderCollapse:"collapse" }}>
+          <thead>
+            <tr>
+              <th style={{ padding:"10px 14px", textAlign:"left", fontSize:9, fontWeight:600, textTransform:"uppercase", letterSpacing:".8px", color:"#5a6478", fontFamily:"monospace", borderBottom:"1px solid rgba(255,255,255,.05)" }}>ID</th>
+              <SortTh label="Nome"    field="name"         sortBy={sortBy} onSort={toggleSort}/>
+              <SortTh label="Empresa" field="company"      sortBy={sortBy} onSort={toggleSort}/>
+              <th style={{ padding:"10px 14px", textAlign:"left", fontSize:9, fontWeight:600, textTransform:"uppercase", letterSpacing:".8px", color:"#5a6478", fontFamily:"monospace", borderBottom:"1px solid rgba(255,255,255,.05)" }}>Email</th>
+              <th style={{ padding:"10px 14px", textAlign:"left", fontSize:9, fontWeight:600, textTransform:"uppercase", letterSpacing:".8px", color:"#5a6478", fontFamily:"monospace", borderBottom:"1px solid rgba(255,255,255,.05)" }}>Pagamento</th>
+              <th style={{ padding:"10px 14px", textAlign:"left", fontSize:9, fontWeight:600, textTransform:"uppercase", letterSpacing:".8px", color:"#5a6478", fontFamily:"monospace", borderBottom:"1px solid rgba(255,255,255,.05)" }}>Projeto</th>
+              <SortTh label="Valor"   field="projectValue" sortBy={sortBy} onSort={toggleSort}/>
+              <SortTh label="Entrega" field="endDate"      sortBy={sortBy} onSort={toggleSort}/>
+              <th style={{ padding:"10px 14px", borderBottom:"1px solid rgba(255,255,255,.05)" }}/>
+            </tr>
+          </thead>
           <tbody>
-            {dataLoading?<TableSkeleton rows={5}/>:paginated.length===0
-              ?<tr><td colSpan={9} style={{padding:"48px 0",textAlign:"center",color:"#5a6478",fontSize:13}}>{hasFilters?"Nenhum resultado para os filtros aplicados":"Nenhum cliente ainda"}</td></tr>
-              :paginated.map(c=>{
-                const pal=avatarColor(c.name); const ps=PAYMENT_STATUS[c.paymentStatus??"pendente"]; const prs=PROJECT_STATUS[c.projectStatus??"andamento"]
-                return (
-                  <tr key={c.id} style={{borderBottom:"1px solid rgba(255,255,255,.03)",transition:"background .12s",cursor:"pointer"}} onClick={()=>openClientModal(c)} onMouseEnter={e=>e.currentTarget.style.background="#161b2a"} onMouseLeave={e=>e.currentTarget.style.background="transparent"}>
-                    <td style={{padding:"11px 14px"}}><span style={{fontSize:9,fontFamily:"monospace",color:"#5a6478",letterSpacing:".2px"}}>{c.id.slice(0,8)}…</span></td>
-                    <td style={{padding:"11px 14px"}}><div style={{display:"flex",alignItems:"center",gap:8}}><div style={{width:28,height:28,borderRadius:7,background:pal.bg,color:pal.fg,display:"flex",alignItems:"center",justifyContent:"center",fontSize:9,fontWeight:700,flexShrink:0}}>{initials(c.name)}</div><div><div style={{fontSize:12,fontWeight:500,color:"#e8eaf0"}}><Highlight text={c.name} term={rawQuery}/></div>{(c.tags||[]).length>0&&<div style={{display:"flex",gap:3,marginTop:2,flexWrap:"wrap"}}>{c.tags.map(t=><TagPill key={t} label={t}/>)}</div>}</div></div></td>
-                    <td style={{padding:"11px 14px",fontSize:12,color:"#8892a4"}}><Highlight text={c.company||"—"} term={rawQuery}/></td>
-                    <td style={{padding:"11px 14px",fontSize:11,color:"#5a6478",fontFamily:"monospace"}}><Highlight text={c.email||""} term={rawQuery}/></td>
-                    <td style={{padding:"11px 14px"}} onClick={e=>e.stopPropagation()}><Badge colorKey={ps.badge} label={ps.label}/></td>
-                    <td style={{padding:"11px 14px"}} onClick={e=>e.stopPropagation()}><Badge colorKey={prs.badge} label={prs.label}/></td>
-                    <td style={{padding:"11px 14px",fontSize:12,color:"#22c97d",fontFamily:"monospace",fontWeight:600}}>{formatCurrency(c.projectValue)}</td>
-                    <td style={{padding:"11px 14px",fontSize:11,color:"#5a6478",fontFamily:"monospace"}}>{formatDate(c.endDate)}</td>
-                    <td style={{padding:"11px 14px"}} onClick={e=>e.stopPropagation()}><div style={{display:"flex",gap:6}}>
-                      <button onClick={()=>openEdit(c)} title="Editar" style={{width:28,height:28,borderRadius:6,background:"rgba(79,110,247,.1)",border:"1px solid rgba(79,110,247,.2)",color:"#4f6ef7",cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center"}}><Icon d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z" size={12}/></button>
-                      <button onClick={()=>setConfirmId(c.id)} title="Deletar" style={{width:28,height:28,borderRadius:6,background:"rgba(239,68,68,.1)",border:"1px solid rgba(239,68,68,.2)",color:"#ef4444",cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center"}}><Icon d="M3 6h18M8 6V4h8v2M19 6l-1 14H6L5 6" size={12}/></button>
-                    </div></td>
-                  </tr>
-                )
-              })
+            {dataLoading
+              ? <TableSkeleton rows={5}/>
+              : paginated.length === 0
+                ? <tr><td colSpan={9} style={{ padding:"48px 0", textAlign:"center", color:"#5a6478", fontSize:13 }}>{hasFilters ? "Nenhum resultado para os filtros aplicados" : "Nenhum cliente ainda"}</td></tr>
+                : paginated.map(c => {
+                    const pal = avatarColor(c.name)
+                    const ps  = PAYMENT_STATUS[c.paymentStatus ?? "pendente"]
+                    const prs = PROJECT_STATUS[c.projectStatus ?? "andamento"]
+                    return (
+                      <tr key={c.id} style={{ borderBottom:"1px solid rgba(255,255,255,.03)", transition:"background .12s", cursor:"pointer" }}
+                        onClick={() => openClientModal(c)}
+                        onMouseEnter={e => e.currentTarget.style.background="#161b2a"}
+                        onMouseLeave={e => e.currentTarget.style.background="transparent"}>
+                        <td style={{ padding:"11px 14px" }}>
+                          <span style={{ fontSize:9, fontFamily:"monospace", color:"#5a6478", letterSpacing:".2px" }}>{c.id.slice(0,8)}…</span>
+                        </td>
+                        <td style={{ padding:"11px 14px" }}>
+                          <div style={{ display:"flex", alignItems:"center", gap:8 }}>
+                            <div style={{ width:28, height:28, borderRadius:7, background:pal.bg, color:pal.fg, display:"flex", alignItems:"center", justifyContent:"center", fontSize:9, fontWeight:700, flexShrink:0 }}>{initials(c.name)}</div>
+                            <div>
+                              <div style={{ fontSize:12, fontWeight:500, color:"#e8eaf0" }}><Highlight text={c.name} term={rawQuery}/></div>
+                              {(c.tags||[]).length > 0 && <div style={{ display:"flex", gap:3, marginTop:2, flexWrap:"wrap" }}>{c.tags.map(t => <TagPill key={t} label={t}/>)}</div>}
+                            </div>
+                          </div>
+                        </td>
+                        <td style={{ padding:"11px 14px", fontSize:12, color:"#8892a4" }}><Highlight text={c.company||"—"} term={rawQuery}/></td>
+                        <td style={{ padding:"11px 14px", fontSize:11, color:"#5a6478", fontFamily:"monospace" }}><Highlight text={c.email||""} term={rawQuery}/></td>
+                        <td style={{ padding:"11px 14px" }} onClick={e => e.stopPropagation()}><Badge colorKey={ps.badge} label={ps.label}/></td>
+                        <td style={{ padding:"11px 14px" }} onClick={e => e.stopPropagation()}><Badge colorKey={prs.badge} label={prs.label}/></td>
+                        <td style={{ padding:"11px 14px", fontSize:12, color:"#22c97d", fontFamily:"monospace", fontWeight:600 }}>{formatCurrency(c.projectValue)}</td>
+                        <td style={{ padding:"11px 14px", fontSize:11, color:"#5a6478", fontFamily:"monospace" }}>{formatDate(c.endDate)}</td>
+                        <td style={{ padding:"11px 14px" }} onClick={e => e.stopPropagation()}>
+                          <div style={{ display:"flex", gap:6 }}>
+                            <button onClick={() => openEdit(c)} title="Editar"
+                              style={{ width:28, height:28, borderRadius:6, background:"rgba(79,110,247,.1)", border:"1px solid rgba(79,110,247,.2)", color:"#4f6ef7", cursor:"pointer", display:"flex", alignItems:"center", justifyContent:"center" }}>
+                              <Icon d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z" size={12}/>
+                            </button>
+                            <button onClick={() => setConfirmId(c.id)} title="Deletar"
+                              style={{ width:28, height:28, borderRadius:6, background:"rgba(239,68,68,.1)", border:"1px solid rgba(239,68,68,.2)", color:"#ef4444", cursor:"pointer", display:"flex", alignItems:"center", justifyContent:"center" }}>
+                              <Icon d="M3 6h18M8 6V4h8v2M19 6l-1 14H6L5 6" size={12}/>
+                            </button>
+                          </div>
+                        </td>
+                      </tr>
+                    )
+                  })
             }
           </tbody>
         </table>
-        <Pagination total={filtered.length} page={page} perPage={perPage} onPage={p=>{setPage(p);window.scrollTo(0,0)}} onPerPage={setPerPage}/>
+        <Pagination total={filtered.length} page={page} perPage={perPage}
+          onPage={p => { setPage(p); window.scrollTo(0,0) }} onPerPage={setPerPage}/>
       </div>
-      <style>{`@keyframes spin { to { transform: rotate(360deg); } } @keyframes shimmer { to { background-position: -400% 0; } }`}</style>
+
+      <style>{`
+        @keyframes spin    { to { transform: rotate(360deg); } }
+        @keyframes shimmer { to { background-position: -400% 0; } }
+      `}</style>
     </div>
   )
 }
 
+// ═══════════════════════════════════════════════════════════════════
+// 10. REPORTS VIEW
+// ═══════════════════════════════════════════════════════════════════
 function ReportsView({ clients, deals }) {
-  const wonDeals  = useMemo(()=>deals.filter(d=>d.stage==="fechado"),[deals])
+  const wonDeals  = useMemo(() => deals.filter(d => d.stage==="fechado"), [deals])
   const convRate  = deals.length > 0 ? Math.round((wonDeals.length/deals.length)*100) : 0
-  const avgTicket = wonDeals.length > 0 ? wonDeals.reduce((s,d)=>s+d.value,0)/wonDeals.length : 0
+  const avgTicket = wonDeals.length > 0 ? wonDeals.reduce((s,d) => s+d.value, 0)/wonDeals.length : 0
   return (
     <div>
       <div style={{ display:"grid", gridTemplateColumns:"repeat(4,1fr)", gap:12, marginBottom:20 }}>
-        <StatCard label="Total clientes" value={clients.length}/>
+        <StatCard label="Total clientes"       value={clients.length}/>
         <StatCard label="Negociações fechadas" value={wonDeals.length}/>
-        <StatCard label="Taxa conversão" value={`${convRate}%`}/>
-        <StatCard label="Ticket médio" value={formatCurrency(avgTicket)}/>
+        <StatCard label="Taxa conversão"       value={`${convRate}%`}/>
+        <StatCard label="Ticket médio"         value={formatCurrency(avgTicket)}/>
       </div>
       <Card title="Distribuição por status de pagamento">
         {Object.entries(PAYMENT_STATUS).map(([key,s]) => {
-          const count = clients.filter(c=>(c.paymentStatus||"pendente")===key).length
+          const count = clients.filter(c => (c.paymentStatus||"pendente")===key).length
           const pct   = clients.length > 0 ? Math.round((count/clients.length)*100) : 0
           return (
             <div key={key} style={{ marginBottom:14 }}>
@@ -1373,6 +1491,9 @@ function ReportsView({ clients, deals }) {
   )
 }
 
+// ═══════════════════════════════════════════════════════════════════
+// 11. NOTIFICATIONS VIEW
+// ═══════════════════════════════════════════════════════════════════
 function NotificationsView() {
   const notifs = [
     { icon:"✓",  color:"#22c97d", unread:true,  title:"Negociação fechada com sucesso", desc:"Alpha S.A. — confirmado.",         time:"há 23 min" },
@@ -1408,19 +1529,25 @@ function NotificationsView() {
   )
 }
 
+// ═══════════════════════════════════════════════════════════════════
+// 12. SETTINGS VIEW
+// ═══════════════════════════════════════════════════════════════════
 function SettingsView({ user, onLogout }) {
   const [toggles, setToggles] = useState({ emailNotif:true, dealAlerts:true, weeklyReport:false, twoFactor:false, webhook:true })
+
   function Toggle({ k }) {
     return (
-      <div onClick={() => setToggles(p => ({...p,[k]:!p[k]}))}
-        style={{ width:36, height:20, borderRadius:20, background:toggles[k]?"#4f6ef7":"#1c2236",
-          border:`1px solid ${toggles[k]?"#4f6ef7":"rgba(255,255,255,.1)"}`,
+      <div onClick={() => setToggles(p => ({ ...p, [k]:!p[k] }))}
+        style={{ width:36, height:20, borderRadius:20,
+          background: toggles[k] ? "#4f6ef7" : "#1c2236",
+          border:`1px solid ${toggles[k] ? "#4f6ef7" : "rgba(255,255,255,.1)"}`,
           position:"relative", cursor:"pointer", transition:"all .2s", flexShrink:0 }}>
-        <div style={{ position:"absolute", top:2, left:toggles[k]?16:2, width:14, height:14,
-          borderRadius:"50%", background:toggles[k]?"#fff":"#5a6478", transition:"left .2s" }}/>
+        <div style={{ position:"absolute", top:2, left: toggles[k] ? 16 : 2, width:14, height:14,
+          borderRadius:"50%", background: toggles[k] ? "#fff" : "#5a6478", transition:"left .2s" }}/>
       </div>
     )
   }
+
   function Section({ icon, title, children }) {
     return (
       <div style={{ background:"#111520", border:"1px solid rgba(255,255,255,.06)", borderRadius:12, overflow:"hidden", marginBottom:12 }}>
@@ -1431,6 +1558,7 @@ function SettingsView({ user, onLogout }) {
       </div>
     )
   }
+
   function Row({ label, desc, right }) {
     return (
       <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", padding:"12px 16px", borderBottom:"1px solid rgba(255,255,255,.03)" }}>
@@ -1442,6 +1570,7 @@ function SettingsView({ user, onLogout }) {
       </div>
     )
   }
+
   return (
     <div>
       <Section icon="👤" title="Minha conta">
@@ -1450,26 +1579,26 @@ function SettingsView({ user, onLogout }) {
         <Row label="Logout" desc="Encerrar sessão atual" right={<button onClick={onLogout} style={{ padding:"5px 12px", borderRadius:6, background:"rgba(239,68,68,.1)", border:"1px solid rgba(239,68,68,.2)", color:"#ef4444", fontSize:11, cursor:"pointer", fontFamily:"inherit" }}>Sair</button>}/>
       </Section>
       <Section icon="🏢" title="Empresa">
-        <Row label="Nome" right={<span style={{ fontSize:12, color:"#5a6478", fontFamily:"monospace" }}>Decillion</span>}/>
-        <Row label="Plano" right={<Badge colorKey="purple" label="Pro"/>}/>
-        <Row label="Backend" right={<span style={{ fontSize:11, color:"#22c97d", fontFamily:"monospace" }}>Supabase ✓</span>}/>
+        <Row label="Nome"      right={<span style={{ fontSize:12, color:"#5a6478", fontFamily:"monospace" }}>Decillion</span>}/>
+        <Row label="Plano"     right={<Badge colorKey="purple" label="Pro"/>}/>
+        <Row label="Backend"   right={<span style={{ fontSize:11, color:"#22c97d", fontFamily:"monospace" }}>Supabase ✓</span>}/>
         <Row label="Fuso horário" right={<span style={{ fontSize:11, color:"#5a6478", fontFamily:"monospace" }}>America/São_Paulo</span>}/>
       </Section>
       <Section icon="🔔" title="Notificações">
-        <Row label="Por email" desc="Resumo diário" right={<Toggle k="emailNotif"/>}/>
+        <Row label="Por email"            desc="Resumo diário"             right={<Toggle k="emailNotif"/>}/>
         <Row label="Alertas de negociações" desc="Ao fechar uma negociação" right={<Toggle k="dealAlerts"/>}/>
-        <Row label="Relatório semanal" desc="Toda segunda-feira" right={<Toggle k="weeklyReport"/>}/>
+        <Row label="Relatório semanal"    desc="Toda segunda-feira"        right={<Toggle k="weeklyReport"/>}/>
       </Section>
       <Section icon="🔒" title="Segurança">
-        <Row label="2FA" desc="Autenticação em dois fatores" right={<Toggle k="twoFactor"/>}/>
-        <Row label="Webhook" desc="Receber eventos em tempo real" right={<Toggle k="webhook"/>}/>
+        <Row label="2FA"     desc="Autenticação em dois fatores"   right={<Toggle k="twoFactor"/>}/>
+        <Row label="Webhook" desc="Receber eventos em tempo real"  right={<Toggle k="webhook"/>}/>
       </Section>
     </div>
   )
 }
 
 // ═══════════════════════════════════════════════════════════════════
-// 8. PAGE TRANSITION
+// 13. PAGE TRANSITION
 // ═══════════════════════════════════════════════════════════════════
 const pageVariants = {
   initial: { opacity:0, y:8  },
@@ -1478,23 +1607,20 @@ const pageVariants = {
 }
 
 // ═══════════════════════════════════════════════════════════════════
-// 9. APP ROOT
+// 14. APP ROOT
 // ═══════════════════════════════════════════════════════════════════
 export default function App() {
   const { user, loading:authLoading, error:authError, login, register, logout, setError } = useAuth()
   const { toasts, addToast, removeToast } = useToast()
 
-  const [activeTab,   setActiveTab]   = useState("dashboard")
-  const [paletteOpen, setPaletteOpen] = useState(false)
-  const [detailClient,setDetailClient]= useState(null)
-  const [dataLoading, setDataLoading] = useState(false)
+  const [activeTab,    setActiveTab]    = useState("dashboard")
+  const [paletteOpen,  setPaletteOpen]  = useState(false)
+  const [detailClient, setDetailClient] = useState(null)
+  const [dataLoading,  setDataLoading]  = useState(false)
 
   const [clients, setClients] = useState([])
   const [deals,   setDeals]   = useState([])
   const [tasks,   setTasks]   = useState([])
-
-  // ← REMOVIDO: financeClient, financeProject, openFinance
-  // O financeiro agora é módulo próprio acessado pela sidebar — sem estado extra no App
 
   useDataLoader(user, setClients, setDeals, setTasks)
 
@@ -1530,7 +1656,7 @@ export default function App() {
     }
   }
 
-  function openClientModal(c) { setDetailClient(c) }
+  function openClientModal(c)  { setDetailClient(c) }
 
   function openEditFromModal(c) {
     setDetailClient(null)
@@ -1572,7 +1698,8 @@ export default function App() {
 
       <AnimatePresence>
         {paletteOpen && (
-          <CommandPalette open={paletteOpen} onClose={() => setPaletteOpen(false)} clients={clients} setActiveTab={setActiveTab} openClientModal={openClientModal}/>
+          <CommandPalette open={paletteOpen} onClose={() => setPaletteOpen(false)}
+            clients={clients} setActiveTab={setActiveTab} openClientModal={openClientModal}/>
         )}
       </AnimatePresence>
 
@@ -1583,39 +1710,49 @@ export default function App() {
             onClose={() => setDetailClient(null)}
             onEdit={openEditFromModal}
             onAddActivity={addActivity}
-            // ← REMOVIDO: onOpenFinance
           />
         )}
       </AnimatePresence>
 
-      {/* SIDEBAR */}
-      <aside style={{ width:220, minWidth:220, background:"#111520", borderRight:"1px solid rgba(255,255,255,.06)", display:"flex", flexDirection:"column", padding:"20px 0", height:"100vh", overflowY:"auto" }}>
+      {/* ── SIDEBAR ── */}
+      <aside style={{ width:220, minWidth:220, background:"#111520", borderRight:"1px solid rgba(255,255,255,.06)",
+        display:"flex", flexDirection:"column", padding:"20px 0", height:"100vh", overflowY:"auto" }}>
         <div style={{ padding:"0 20px 24px", borderBottom:"1px solid rgba(255,255,255,.06)", marginBottom:16 }}>
           <div style={{ fontSize:16, fontWeight:600, color:"#e8eaf0", letterSpacing:"-.3px" }}>Decillion</div>
           <div style={{ fontSize:10, color:"#3a4255", marginTop:2, fontFamily:"monospace", textTransform:"uppercase", letterSpacing:".8px" }}>Manager v3.0</div>
         </div>
+
         <div style={{ padding:"0 12px", marginBottom:8 }}>
-          <button onClick={() => setPaletteOpen(true)} style={{ width:"100%", display:"flex", alignItems:"center", gap:8, padding:"7px 10px", borderRadius:8, background:"#161b2a", border:"1px solid rgba(255,255,255,.07)", cursor:"pointer", color:"#5a6478", fontSize:11, fontFamily:"inherit" }}>
+          <button onClick={() => setPaletteOpen(true)}
+            style={{ width:"100%", display:"flex", alignItems:"center", gap:8, padding:"7px 10px", borderRadius:8,
+              background:"#161b2a", border:"1px solid rgba(255,255,255,.07)", cursor:"pointer", color:"#5a6478", fontSize:11, fontFamily:"inherit" }}>
             <Icon d="M21 21l-4.35-4.35M17 11A6 6 0 1 1 5 11a6 6 0 0 1 12 0z" size={12}/>
             <span style={{ flex:1, textAlign:"left" }}>Buscar…</span>
             <span style={{ fontSize:9, fontFamily:"monospace", background:"#1c2236", border:"1px solid rgba(255,255,255,.07)", padding:"1px 5px", borderRadius:3 }}>⌘K</span>
           </button>
         </div>
+
         {NAV_SECTIONS.map(section => (
           <div key={section.label} style={{ padding:"0 12px", marginBottom:4 }}>
-            <div style={{ fontSize:9, color:"#3a4255", textTransform:"uppercase", letterSpacing:1, fontWeight:600, padding:"8px 8px 6px", fontFamily:"monospace" }}>{section.label}</div>
+            <div style={{ fontSize:9, color:"#3a4255", textTransform:"uppercase", letterSpacing:1, fontWeight:600, padding:"8px 8px 6px", fontFamily:"monospace" }}>
+              {section.label}
+            </div>
             {section.items.map(({ id, label, icon, badgeKey }) => {
-              const active = activeTab === id
+              const active     = activeTab === id
               const badgeCount = badgeKey ? badgeCounts[badgeKey] : undefined
               return (
                 <button key={id} onClick={() => setActiveTab(id)}
-                  style={{ width:"100%", display:"flex", alignItems:"center", gap:10, padding:"7px 10px", borderRadius:8, cursor:"pointer", fontSize:12.5, fontWeight:400, border:"none", textAlign:"left", marginBottom:1, fontFamily:"inherit", background:active?"#4f6ef7":"transparent", color:active?"#fff":"#8892a4", transition:"all .15s" }}
-                  onMouseEnter={e => { if(!active){ e.currentTarget.style.background="#161b2a"; e.currentTarget.style.color="#e8eaf0" }}}
-                  onMouseLeave={e => { if(!active){ e.currentTarget.style.background="transparent"; e.currentTarget.style.color="#8892a4" }}}>
+                  style={{ width:"100%", display:"flex", alignItems:"center", gap:10, padding:"7px 10px", borderRadius:8,
+                    cursor:"pointer", fontSize:12.5, fontWeight:400, border:"none", textAlign:"left", marginBottom:1, fontFamily:"inherit",
+                    background: active ? "#4f6ef7" : "transparent",
+                    color:      active ? "#fff"    : "#8892a4",
+                    transition:"all .15s" }}
+                  onMouseEnter={e => { if (!active) { e.currentTarget.style.background="#161b2a"; e.currentTarget.style.color="#e8eaf0" }}}
+                  onMouseLeave={e => { if (!active) { e.currentTarget.style.background="transparent"; e.currentTarget.style.color="#8892a4" }}}>
                   <Icon d={icon} size={14}/>
                   <span style={{ flex:1 }}>{label}</span>
                   {badgeCount !== undefined && badgeCount > 0 && (
-                    <span style={{ background:active?"rgba(255,255,255,.2)":"#1c2236", border:`1px solid ${active?"rgba(255,255,255,.25)":"rgba(255,255,255,.08)"}`, borderRadius:20, padding:"1px 6px", fontSize:9, fontFamily:"monospace", color:active?"rgba(255,255,255,.8)":"#5a6478" }}>
+                    <span style={{ background: active?"rgba(255,255,255,.2)":"#1c2236", border:`1px solid ${active?"rgba(255,255,255,.25)":"rgba(255,255,255,.08)"}`, borderRadius:20, padding:"1px 6px", fontSize:9, fontFamily:"monospace", color: active?"rgba(255,255,255,.8)":"#5a6478" }}>
                       {badgeCount}
                     </span>
                   )}
@@ -1624,6 +1761,7 @@ export default function App() {
             })}
           </div>
         ))}
+
         <div style={{ padding:"0 12px", marginTop:8 }}>
           <div style={{ fontSize:9, color:"#3a4255", fontFamily:"monospace", lineHeight:1.8, padding:"8px 10px", background:"#0d1018", borderRadius:8, border:"1px solid rgba(255,255,255,.04)" }}>
             {[["1","Dashboard"],["2","Pipeline"],["3","Clientes"],["4","Kanban"],["5","Tarefas"]].map(([k,l]) => (
@@ -1634,15 +1772,19 @@ export default function App() {
             ))}
           </div>
         </div>
+
         <div style={{ marginTop:"auto", padding:"16px 12px 0", borderTop:"1px solid rgba(255,255,255,.05)" }}>
           <div style={{ display:"flex", alignItems:"center", gap:10, padding:"8px 10px", borderRadius:8, background:"#161b2a", border:"1px solid rgba(255,255,255,.06)", marginBottom:6 }}>
-            <div style={{ width:28, height:28, borderRadius:8, background:"linear-gradient(135deg,#4f6ef7,#a78bfa)", display:"flex", alignItems:"center", justifyContent:"center", fontSize:10, fontWeight:600, color:"#fff", flexShrink:0 }}>{initials(displayName)}</div>
+            <div style={{ width:28, height:28, borderRadius:8, background:"linear-gradient(135deg,#4f6ef7,#a78bfa)", display:"flex", alignItems:"center", justifyContent:"center", fontSize:10, fontWeight:600, color:"#fff", flexShrink:0 }}>
+              {initials(displayName)}
+            </div>
             <div style={{ flex:1, minWidth:0 }}>
               <div style={{ fontSize:12, fontWeight:500, color:"#e8eaf0", overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>{displayName}</div>
               <div style={{ fontSize:9, color:"#3a4255", fontFamily:"monospace", textTransform:"uppercase", letterSpacing:".5px", overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>{user.email}</div>
             </div>
           </div>
-          <button onClick={logout} style={{ width:"100%", display:"flex", alignItems:"center", gap:8, padding:"7px 10px", borderRadius:8, background:"transparent", border:"none", cursor:"pointer", color:"#5a6478", fontSize:12, fontFamily:"inherit", transition:"all .15s" }}
+          <button onClick={logout}
+            style={{ width:"100%", display:"flex", alignItems:"center", gap:8, padding:"7px 10px", borderRadius:8, background:"transparent", border:"none", cursor:"pointer", color:"#5a6478", fontSize:12, fontFamily:"inherit", transition:"all .15s" }}
             onMouseEnter={e => { e.currentTarget.style.background="rgba(239,68,68,.08)"; e.currentTarget.style.color="#ef4444" }}
             onMouseLeave={e => { e.currentTarget.style.background="transparent"; e.currentTarget.style.color="#5a6478" }}>
             <Icon d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4M16 17l5-5-5-5M21 12H9" size={13}/>
@@ -1651,7 +1793,7 @@ export default function App() {
         </div>
       </aside>
 
-      {/* MAIN */}
+      {/* ── MAIN ── */}
       <div style={{ flex:1, display:"flex", flexDirection:"column", height:"100vh", overflow:"hidden" }}>
         <div style={{ padding:"14px 24px", borderBottom:"1px solid rgba(255,255,255,.06)", display:"flex", alignItems:"center", gap:12, background:"#111520", flexShrink:0 }}>
           <div>
@@ -1665,31 +1807,31 @@ export default function App() {
             </div>
           )}
           <div style={{ marginLeft:"auto", display:"flex", alignItems:"center", gap:8 }}>
-            <button onClick={() => setPaletteOpen(true)} style={{ display:"flex", alignItems:"center", gap:6, padding:"6px 12px", borderRadius:7, fontSize:12, cursor:"pointer", fontFamily:"inherit", border:"1px solid rgba(255,255,255,.08)", background:"#161b2a", color:"#8892a4" }}>
+            <button onClick={() => setPaletteOpen(true)}
+              style={{ display:"flex", alignItems:"center", gap:6, padding:"6px 12px", borderRadius:7, fontSize:12, cursor:"pointer", fontFamily:"inherit", border:"1px solid rgba(255,255,255,.08)", background:"#161b2a", color:"#8892a4" }}>
               <Icon d="M21 21l-4.35-4.35M17 11A6 6 0 1 1 5 11a6 6 0 0 1 12 0z" size={12}/>
               Buscar
               <span style={{ fontSize:9, fontFamily:"monospace", background:"#1c2236", border:"1px solid rgba(255,255,255,.07)", padding:"1px 4px", borderRadius:3 }}>⌘K</span>
             </button>
-            <button onClick={() => setActiveTab("clients")} style={{ padding:"6px 14px", borderRadius:7, fontSize:12, fontWeight:500, cursor:"pointer", fontFamily:"inherit", border:"none", background:"#4f6ef7", color:"#fff" }}>
+            <button onClick={() => setActiveTab("clients")}
+              style={{ padding:"6px 14px", borderRadius:7, fontSize:12, fontWeight:500, cursor:"pointer", fontFamily:"inherit", border:"none", background:"#4f6ef7", color:"#fff" }}>
               + Novo cliente
             </button>
           </div>
         </div>
 
         <div style={{ flex:1, overflowY:"auto", padding: activeTab === "finance" ? 0 : 24 }}>
-          {/* ↑ finance ocupa o padding internamente (tem padding próprio via pageStyles) */}
           <AnimatePresence mode="wait">
             <motion.div key={activeTab} variants={pageVariants} initial="initial" animate="animate" exit="exit">
-              {activeTab==="dashboard"     && <DashboardView clients={clients} deals={deals}/>}
-              {activeTab==="pipeline"      && <PipelineView  deals={deals} setDeals={setDeals} addToast={addToast} user={user}/>}
-              {activeTab==="clients"       && <ClientsView   clients={clients} setClients={setClients} addToast={addToast} openClientModal={openClientModal} user={user} dataLoading={dataLoading}/>}
-              {activeTab==="kanban"        && <KanbanPage    addToast={addToast}/>}
+              {activeTab==="dashboard"     && <DashboardView     clients={clients} deals={deals}/>}
+              {activeTab==="pipeline"      && <PipelineView      deals={deals} setDeals={setDeals} addToast={addToast} user={user}/>}
+              {activeTab==="clients"       && <ClientsView       clients={clients} setClients={setClients} addToast={addToast} openClientModal={openClientModal} user={user} dataLoading={dataLoading}/>}
+              {activeTab==="kanban"        && <KanbanPage        addToast={addToast}/>}
               {activeTab==="tasks"         && <TasksPage/>}
-              {activeTab==="finance"       && <FinancePage   addToast={addToast}/>}
-              {/* ← SIMPLIFICADO: uma única rota "finance", sem project_finance */}
-              {activeTab==="reports"       && <ReportsView   clients={clients} deals={deals}/>}
+              {activeTab==="finance"       && <FinancePage       addToast={addToast}/>}
+              {activeTab==="reports"       && <ReportsView       clients={clients} deals={deals}/>}
               {activeTab==="notifications" && <NotificationsView/>}
-              {activeTab==="settings"      && <SettingsView  user={user} onLogout={logout}/>}
+              {activeTab==="settings"      && <SettingsView      user={user} onLogout={logout}/>}
             </motion.div>
           </AnimatePresence>
         </div>
