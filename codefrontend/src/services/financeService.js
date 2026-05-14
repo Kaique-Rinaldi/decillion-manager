@@ -2,62 +2,11 @@
 import { supabase } from "../lib/supabase"
 
 // ─────────────────────────────────────────────────────────────
-// HELPERS
+// PROJECT FINANCES  (vinculado diretamente ao client_id)
 // ─────────────────────────────────────────────────────────────
 
 /**
- * Resolve o project_id real da tabela `projects` a partir de um client_id.
- * Retorna o primeiro projeto vinculado ao cliente, ou null se não existir.
- */
-export async function fetchProjectIdByClient(clientId) {
-  const { data, error } = await supabase
-    .from("projects")
-    .select("id, name")
-    .eq("client_id", clientId)
-    .order("created_at", { ascending: true })
-    .limit(1)
-    .maybeSingle()
-
-  if (error) throw error
-  return data ?? null   // { id, name } ou null
-}
-
-/**
- * Cria um projeto na tabela `projects` vinculado ao cliente.
- * Usado quando o cliente ainda não tem projeto registrado.
- */
-export async function createProjectForClient(clientId, projectName) {
-  const { data, error } = await supabase
-    .from("projects")
-    .insert({
-      client_id: clientId,
-      name:      projectName || "Projeto Principal",
-    })
-    .select()
-    .single()
-
-  if (error) throw error
-  return data   // { id, name, client_id, ... }
-}
-
-// ─────────────────────────────────────────────────────────────
-// PROJECT FINANCES
-// ─────────────────────────────────────────────────────────────
-
-export async function fetchProjectFinance(projectId) {
-  const { data, error } = await supabase
-    .from("project_finances")
-    .select("*")
-    .eq("project_id", projectId)
-    .maybeSingle()
-
-  if (error) throw error
-  return data ?? null
-}
-
-/**
- * Busca o financeiro pelo client_id (via join com projects).
- * Útil quando não temos o project_id ainda.
+ * Busca o financeiro pelo client_id.
  */
 export async function fetchProjectFinanceByClient(clientId) {
   const { data, error } = await supabase
@@ -72,6 +21,9 @@ export async function fetchProjectFinanceByClient(clientId) {
   return data ?? null
 }
 
+/**
+ * Busca o financeiro pelo seu próprio id (para refresh após operações).
+ */
 export async function fetchProjectFinance_byId(financeId) {
   const { data, error } = await supabase
     .from("project_finances")
@@ -84,79 +36,53 @@ export async function fetchProjectFinance_byId(financeId) {
 }
 
 /**
- * Garante que o financeiro exista para o projeto — nunca gera 409 ou 23503.
+ * Garante que o financeiro exista para o cliente.
  *
  * Fluxo:
- *   1. Resolve o project_id real (da tabela projects), criando se necessário
- *   2. Verifica se já existe um project_finances para esse project_id
- *   3. Upsert atômico com onConflict para evitar 409
+ *   1. Busca por client_id
+ *   2. Se já existir → retorna sem criar nada
+ *   3. Se não existir → cria diretamente com client_id
  *
- * Retorna { data: ProjectFinance, alreadyExisted: boolean, resolvedProjectId: string }
+ * Retorna { data: ProjectFinance, alreadyExisted: boolean }
+ *
+ * ✅ Zero inserts em `projects`
+ * ✅ Zero FK errors em `projects`
+ * ✅ Zero RLS errors em `projects`
  */
-export async function ensureProjectFinance(clientId, projectId, payload) {
-  // ── Etapa 1: resolver project_id real ─────────────────────
-  let realProjectId = projectId
-
-  // Se o projectId passado parece ser o clientId (mesmo valor) ou não é
-  // um UUID de projeto válido, busca/cria o projeto real
-  if (!realProjectId || realProjectId === clientId) {
-    const project = await fetchProjectIdByClient(clientId)
-
-    if (project) {
-      realProjectId = project.id
-    } else {
-      // Cria o projeto vinculado ao cliente
-      const newProject = await createProjectForClient(
-        clientId,
-        payload.projectName || payload.name || "Projeto Principal"
-      )
-      realProjectId = newProject.id
-    }
-  }
-
-  // ── Etapa 2: verificar existência do financeiro ────────────
-  const existing = await fetchProjectFinance(realProjectId)
+export async function ensureProjectFinance(clientId, payload = {}) {
+  // ── Etapa 1: verificar existência ──────────────────────────
+  const existing = await fetchProjectFinanceByClient(clientId)
   if (existing) {
-    return { data: existing, alreadyExisted: true, resolvedProjectId: realProjectId }
+    return { data: existing, alreadyExisted: true }
   }
 
-  // ── Etapa 3: upsert atômico ────────────────────────────────
+  // ── Etapa 2: criar financeiro vinculado ao cliente ─────────
   const { data, error } = await supabase
     .from("project_finances")
-    .upsert(
-      {
-        client_id:    clientId,
-        project_id:   realProjectId,
-        total_amount: Number(payload.total_amount) || 0,
-        payment_type: payload.payment_type || null,
-        notes:        payload.notes?.trim() || null,
-      },
-      {
-        onConflict:       "project_id",
-        ignoreDuplicates: false,
-      }
-    )
+    .insert({
+      client_id:    clientId,
+      total_amount: Number(payload.total_amount) || 0,
+      payment_type: payload.payment_type || null,
+      notes:        payload.notes?.trim() || null,
+    })
     .select()
     .single()
 
-  if (!error) {
-    return { data, alreadyExisted: false, resolvedProjectId: realProjectId }
+  if (error) {
+    // Corrida rara: outro processo criou entre o select e o insert
+    if (error.code === "23505") {
+      const fallback = await fetchProjectFinanceByClient(clientId)
+      if (fallback) return { data: fallback, alreadyExisted: true }
+    }
+    throw error
   }
 
-  // ── Etapa 4: fallback final ────────────────────────────────
-  const fallback = await fetchProjectFinance(realProjectId)
-    ?? await fetchProjectFinanceByClient(clientId)
-
-  if (fallback) {
-    return { data: fallback, alreadyExisted: true, resolvedProjectId: realProjectId }
-  }
-
-  throw error
+  return { data, alreadyExisted: false }
 }
 
-// Alias de compatibilidade
-export async function createProjectFinance(clientId, projectId, payload) {
-  const { data } = await ensureProjectFinance(clientId, projectId, payload)
+// Alias de compatibilidade para chamadas antigas
+export async function createProjectFinance(clientId, _projectId, payload) {
+  const { data } = await ensureProjectFinance(clientId, payload)
   return data
 }
 
@@ -257,7 +183,7 @@ export async function deletePayment(id) {
 }
 
 // ─────────────────────────────────────────────────────────────
-// VISÃO GLOBAL
+// VISÃO GLOBAL / ANALYTICS
 // ─────────────────────────────────────────────────────────────
 
 export async function fetchAllPayments() {
@@ -268,8 +194,7 @@ export async function fetchAllPayments() {
       project_finances (
         id, total_amount, received_amount, remaining_amount,
         progress_percentage, status,
-        projects ( id, name ),
-        clients  ( id, name, company )
+        clients ( id, name, company )
       )
     `)
     .order("due_date", { ascending: true })
@@ -284,8 +209,7 @@ export async function fetchFinanceAnalytics() {
     .select(`
       id, total_amount, received_amount, remaining_amount,
       progress_percentage, status, created_at,
-      projects ( id, name ),
-      clients  ( id, name, company )
+      clients ( id, name, company )
     `)
     .order("created_at", { ascending: false })
 
