@@ -1,7 +1,7 @@
 // src/services/paymentsService.js
 // Segue o mesmo padrão de clientsService.js e dealsService.js
 
-import { supabase } from "../lib/supabaseClient"
+import { supabase } from "../lib/supabase"
 
 // ─────────────────────────────────────────────────────────────
 // BUSCAR pagamentos de um cliente
