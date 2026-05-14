@@ -13,7 +13,7 @@ import {
   fetchClients, createClient, updateClient, deleteClient,
 } from "./services/clientsService"
 import {
-  fetchDeals, updateDeal,
+  fetchDeals, updateDeal, createDeal,
 } from "./services/dealsService"
 import {
   updateTask,
@@ -33,23 +33,15 @@ const PROJECT_STATUS = {
   cancelado: { label: "Cancelado",    badge: "gray"  },
 }
 const PIPELINE_STAGE = {
-  lead:     { label: "Lead",       color: "#60a5fa", order: 0 },
-  contato:  { label: "Contactado", color: "#a78bfa", order: 1 },
-  proposta: { label: "Proposta",   color: "#f59e0b", order: 2 },
-  negoc:    { label: "Negociação", color: "#ec4899", order: 3 },
-  fechado:  { label: "Fechado ✓",  color: "#22c97d", order: 4 },
+  lead:       { label: "Lead",       color: "#60a5fa", order: 0 },
+  contactado: { label: "Contactado", color: "#a78bfa", order: 1 },
+  proposta:   { label: "Proposta",   color: "#f59e0b", order: 2 },
+  negociacao: { label: "Negociação", color: "#ec4899", order: 3 },
+  fechado:    { label: "Fechado ✓",  color: "#22c97d", order: 4 },
 }
-const PIPELINE_STAGE_KEYS = ["lead","contato","proposta","negoc","fechado"]
+const PIPELINE_STAGE_KEYS = ["lead","contactado","proposta","negociacao","fechado"]
 
 const PROGRESS_BY_STATUS = { andamento: 45, concluido: 100, cancelado: 0 }
-
-const ALLOWED_TRANSITIONS = {
-  lead:     ["contato"],
-  contato:  ["lead","proposta"],
-  proposta: ["contato","negoc"],
-  negoc:    ["proposta","fechado"],
-  fechado:  ["negoc"],
-}
 
 // ═══════════════════════════════════════════════════════════════════
 // 2. HELPERS
@@ -651,7 +643,7 @@ function ClientDetailModal({ client, onClose, onEdit, onAddActivity }) {
 }
 
 // ═══════════════════════════════════════════════════════════════════
-// 7. VIEWS (Dashboard, Pipeline, Clients, Reports, Notifications, Settings)
+// 7. VIEWS
 // ═══════════════════════════════════════════════════════════════════
 
 function DashboardView({ clients, deals }) {
@@ -776,14 +768,26 @@ function DashboardView({ clients, deals }) {
   )
 }
 
-function PipelineView({ deals, setDeals, addToast }) {
-  const [draggingId, setDraggingId] = useState(null)
-  const [overStage,  setOverStage]  = useState(null)
+// ═══════════════════════════════════════════════════════════════════
+// PIPELINE VIEW — completa, com criar deal e drag & drop livre
+// ═══════════════════════════════════════════════════════════════════
+function PipelineView({ deals, setDeals, addToast, user }) {
+  const [draggingId,   setDraggingId]   = useState(null)
+  const [overStage,    setOverStage]    = useState(null)
+  const [showForm,     setShowForm]     = useState(false)
+  const [form,         setForm]         = useState({ stage:"lead", value:"" })
+  const [formErrors,   setFormErrors]   = useState({})
+  const [saving,       setSaving]       = useState(false)
+  const [editingDeal,  setEditingDeal]  = useState(null)
+  const [confirmId,    setConfirmId]    = useState(null)
 
   const totalValue = deals.reduce((s,d) => s + d.value, 0)
   const openDeals  = deals.filter(d => d.stage !== "fechado")
-  const avgTicket  = openDeals.length > 0 ? openDeals.reduce((s,d) => s + d.value, 0) / openDeals.length : 0
+  const avgTicket  = openDeals.length > 0
+    ? openDeals.reduce((s,d) => s + d.value, 0) / openDeals.length
+    : 0
 
+  // ── Drag & drop ────────────────────────────────────────────────
   function onDragStart(id) { setDraggingId(id) }
   function onDragOver(e, stageKey) { e.preventDefault(); setOverStage(stageKey) }
 
@@ -792,19 +796,21 @@ function PipelineView({ deals, setDeals, addToast }) {
     if (!draggingId) return
     const deal = deals.find(d => d.id === draggingId)
     if (!deal || deal.stage === targetStage) { setDraggingId(null); return }
-    const allowed = ALLOWED_TRANSITIONS[deal.stage] ?? []
-    if (!allowed.includes(targetStage)) {
-      addToast(`Transição "${PIPELINE_STAGE[deal.stage].label}" → "${PIPELINE_STAGE[targetStage].label}" não permitida.`, "error")
-      setDraggingId(null); return
-    }
-    const closedAt = targetStage === "fechado" ? new Date().toISOString().split("T")[0] : null
+
+    const closedAt = targetStage === "fechado"
+      ? new Date().toISOString().split("T")[0]
+      : null
+
+    // Optimistic update
     setDeals(prev => prev.map(d =>
       d.id === draggingId ? { ...d, stage: targetStage, closedAt } : d
     ))
+
     try {
       await updateDeal(draggingId, { stage: targetStage, closedAt })
       addToast(`Negociação movida para "${PIPELINE_STAGE[targetStage].label}"`, "success")
     } catch {
+      // Rollback
       setDeals(prev => prev.map(d =>
         d.id === draggingId ? { ...d, stage: deal.stage, closedAt: deal.closedAt } : d
       ))
@@ -813,13 +819,101 @@ function PipelineView({ deals, setDeals, addToast }) {
     setDraggingId(null)
   }
 
+  // ── Form helpers ───────────────────────────────────────────────
+  function openCreate() {
+    setForm({ stage:"lead", value:"", name:"", company:"" })
+    setFormErrors({})
+    setEditingDeal(null)
+    setShowForm(true)
+  }
+  function openEdit(deal) {
+    setForm({ name: deal.name, company: deal.company, value: deal.value, stage: deal.stage })
+    setFormErrors({})
+    setEditingDeal(deal)
+    setShowForm(true)
+  }
+  function closeForm() { setShowForm(false); setEditingDeal(null) }
+
+  function validateForm(f) {
+    const e = {}
+    if (!f.name?.trim())           e.name  = "Nome obrigatório"
+    if (!f.value || Number(f.value) <= 0) e.value = "Valor deve ser > 0"
+    if (!f.stage)                  e.stage = "Selecione uma etapa"
+    return e
+  }
+
+  function setF(k, v) {
+    setForm(p => ({ ...p, [k]: v }))
+    setFormErrors(p => ({ ...p, [k]: "" }))
+  }
+
+  async function handleSave(e) {
+    e.preventDefault()
+    const errs = validateForm(form)
+    if (Object.keys(errs).length) { setFormErrors(errs); return }
+    setSaving(true)
+    try {
+      const payload = {
+        name:    form.name.trim(),
+        company: form.company?.trim() || "",
+        value:   Number(form.value),
+        stage:   form.stage,
+        closedAt: form.stage === "fechado" ? new Date().toISOString().split("T")[0] : null,
+      }
+      if (editingDeal) {
+        const updated = await updateDeal(editingDeal.id, payload)
+        setDeals(prev => prev.map(d => d.id === editingDeal.id ? updated : d))
+        addToast("Negociação atualizada!", "success")
+      } else {
+        const created = await createDeal(user.id, payload)
+        setDeals(prev => [created, ...prev])
+        addToast("Negociação criada!", "success")
+      }
+      closeForm()
+    } catch (err) {
+      addToast(`Erro: ${err.message}`, "error")
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  async function handleDelete(id) {
+    try {
+      const { deleteDeal } = await import("./services/dealsService")
+      await deleteDeal(id)
+      setDeals(prev => prev.filter(d => d.id !== id))
+      addToast("Negociação removida.", "warning")
+    } catch (err) {
+      addToast(`Erro ao deletar: ${err.message}`, "error")
+    }
+    setConfirmId(null)
+  }
+
+  const inputStyle = {
+    background:"#161b2a", border:"1px solid rgba(255,255,255,.15)", borderRadius:7,
+    padding:"7px 10px", fontSize:12, color:"#e8eaf0", fontFamily:"inherit", outline:"none", width:"100%",
+    boxSizing:"border-box",
+  }
+
   return (
     <div>
+      {/* Header row */}
+      <div style={{ display:"flex", justifyContent:"flex-end", marginBottom:16 }}>
+        <button onClick={openCreate}
+          style={{ display:"flex", alignItems:"center", gap:6, padding:"7px 16px", borderRadius:8,
+            background:"#4f6ef7", border:"none", color:"#fff", fontSize:12, fontWeight:500,
+            cursor:"pointer", fontFamily:"inherit" }}>
+          + Nova negociação
+        </button>
+      </div>
+
+      {/* Kanban board */}
       <div style={{ display:"grid", gridTemplateColumns:"repeat(5,1fr)", gap:8, marginBottom:20 }}>
         {PIPELINE_STAGE_KEYS.map(stageKey => {
           const stage      = PIPELINE_STAGE[stageKey]
           const stageDeals = deals.filter(d => d.stage === stageKey)
           const isOver     = overStage === stageKey
+          const stageValue = stageDeals.reduce((s,d) => s + d.value, 0)
           return (
             <div key={stageKey}
               onDragOver={e => onDragOver(e, stageKey)}
@@ -827,8 +921,8 @@ function PipelineView({ deals, setDeals, addToast }) {
               onDrop={() => onDrop(stageKey)}
               style={{ background: isOver ? stage.color+"14" : "#111520",
                 border:`1px solid ${isOver ? stage.color+"60" : "rgba(255,255,255,.06)"}`,
-                borderRadius:10, padding:10, minHeight:120, transition:"all .15s" }}>
-              <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", marginBottom:10 }}>
+                borderRadius:10, padding:10, minHeight:160, transition:"all .15s" }}>
+              <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", marginBottom:6 }}>
                 <div style={{ fontSize:10, fontWeight:700, textTransform:"uppercase",
                   letterSpacing:".5px", fontFamily:"monospace", color:stage.color }}>{stage.label}</div>
                 <div style={{ fontSize:9, padding:"1px 5px", borderRadius:4,
@@ -836,6 +930,11 @@ function PipelineView({ deals, setDeals, addToast }) {
                   {stageDeals.length}
                 </div>
               </div>
+              {stageDeals.length > 0 && (
+                <div style={{ fontSize:9, color:"#5a6478", fontFamily:"monospace", marginBottom:8 }}>
+                  {formatCurrency(stageValue)}
+                </div>
+              )}
               <AnimatePresence>
                 {stageDeals.map(d => (
                   <motion.div key={d.id} layout
@@ -843,10 +942,29 @@ function PipelineView({ deals, setDeals, addToast }) {
                     draggable onDragStart={() => onDragStart(d.id)}
                     style={{ background:"#161b2a", border:"1px solid rgba(255,255,255,.06)",
                       borderRadius:8, padding:8, marginBottom:6, cursor:"grab",
-                      opacity: draggingId === d.id ? .45 : 1 }}>
-                    <div style={{ fontSize:11, fontWeight:500, color:"#e8eaf0", marginBottom:3,
+                      opacity: draggingId === d.id ? .45 : 1, position:"relative" }}>
+                    {/* Actions */}
+                    <div style={{ position:"absolute", top:6, right:6, display:"flex", gap:4 }}>
+                      <button
+                        onClick={e => { e.stopPropagation(); openEdit(d) }}
+                        title="Editar"
+                        style={{ width:20, height:20, borderRadius:4, background:"rgba(79,110,247,.12)",
+                          border:"1px solid rgba(79,110,247,.2)", color:"#4f6ef7", cursor:"pointer",
+                          display:"flex", alignItems:"center", justifyContent:"center", fontSize:10 }}>
+                        ✎
+                      </button>
+                      <button
+                        onClick={e => { e.stopPropagation(); setConfirmId(d.id) }}
+                        title="Deletar"
+                        style={{ width:20, height:20, borderRadius:4, background:"rgba(239,68,68,.1)",
+                          border:"1px solid rgba(239,68,68,.2)", color:"#ef4444", cursor:"pointer",
+                          display:"flex", alignItems:"center", justifyContent:"center", fontSize:10 }}>
+                        ×
+                      </button>
+                    </div>
+                    <div style={{ fontSize:11, fontWeight:500, color:"#e8eaf0", marginBottom:3, paddingRight:44,
                       overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>{d.name}</div>
-                    <div style={{ fontSize:10, color:"#5a6478", marginBottom:6 }}>{d.company}</div>
+                    <div style={{ fontSize:10, color:"#5a6478", marginBottom:6 }}>{d.company || "—"}</div>
                     <div style={{ fontSize:11, fontWeight:600, color:"#22c97d", fontFamily:"monospace" }}>
                       {formatCurrency(d.value)}
                     </div>
@@ -856,15 +974,144 @@ function PipelineView({ deals, setDeals, addToast }) {
                   </motion.div>
                 ))}
               </AnimatePresence>
+              {stageDeals.length === 0 && (
+                <div style={{ border:"1px dashed rgba(255,255,255,.07)", borderRadius:7,
+                  height:48, display:"flex", alignItems:"center", justifyContent:"center",
+                  fontSize:10, color:"#3a4255" }}>
+                  Solte aqui
+                </div>
+              )}
             </div>
           )
         })}
       </div>
+
+      {/* Stats */}
       <div style={{ display:"grid", gridTemplateColumns:"repeat(3,1fr)", gap:12 }}>
-        <StatCard label="Valor total pipeline" value={formatCurrency(totalValue)}/>
-        <StatCard label="Ticket médio"          value={formatCurrency(avgTicket)}/>
-        <StatCard label="Negociações em aberto" value={openDeals.length}/>
+        <StatCard label="Valor total pipeline" value={formatCurrency(totalValue)}
+          iconPath="M12 2a10 10 0 1 0 0 20A10 10 0 0 0 12 2zM12 6v6l4 2" iconColor="green"/>
+        <StatCard label="Ticket médio (abertos)" value={formatCurrency(avgTicket)}
+          iconPath="M18 20V10M12 20V4M6 20v-6" iconColor="blue"/>
+        <StatCard label="Negociações em aberto" value={openDeals.length}
+          iconPath="M4 6h16M4 12h16M4 18h16" iconColor="amber"/>
       </div>
+
+      {/* Create / Edit form modal */}
+      <AnimatePresence>
+        {showForm && (
+          <div style={{ position:"fixed", inset:0, background:"rgba(0,0,0,.6)", zIndex:1000,
+            display:"flex", alignItems:"center", justifyContent:"center", padding:20,
+            backdropFilter:"blur(4px)" }} onClick={closeForm}>
+            <motion.div initial={{ scale:.93, opacity:0, y:10 }} animate={{ scale:1, opacity:1, y:0 }}
+              exit={{ scale:.93, opacity:0 }} transition={{ duration:.18 }}
+              onClick={e => e.stopPropagation()}
+              style={{ background:"#111520", border:"1px solid rgba(255,255,255,.1)", borderRadius:16,
+                width:"100%", maxWidth:460, boxShadow:"0 20px 60px rgba(0,0,0,.5)" }}>
+              <div style={{ padding:"20px 24px 0", display:"flex", alignItems:"center", justifyContent:"space-between" }}>
+                <div style={{ fontSize:15, fontWeight:600, color:"#e8eaf0" }}>
+                  {editingDeal ? "✏️ Editar negociação" : "➕ Nova negociação"}
+                </div>
+                <button onClick={closeForm}
+                  style={{ background:"none", border:"1px solid rgba(255,255,255,.1)", borderRadius:7,
+                    color:"#8892a4", cursor:"pointer", width:30, height:30,
+                    display:"flex", alignItems:"center", justifyContent:"center", fontSize:18 }}>×</button>
+              </div>
+              <form onSubmit={handleSave} noValidate style={{ padding:"20px 24px 24px" }}>
+                <div style={{ display:"grid", gap:12 }}>
+                  {/* Nome */}
+                  <div>
+                    <div style={{ fontSize:9, color:"#5a6478", fontFamily:"monospace", textTransform:"uppercase",
+                      letterSpacing:".5px", marginBottom:5 }}>Nome da negociação *</div>
+                    <input type="text" value={form.name||""} onChange={e => setF("name", e.target.value)}
+                      placeholder="Ex: Redesign site Acme"
+                      style={{ ...inputStyle, borderColor: formErrors.name ? "#ef4444" : "rgba(255,255,255,.15)" }}/>
+                    {formErrors.name && <div style={{ fontSize:10, color:"#ef4444", marginTop:3 }}>{formErrors.name}</div>}
+                  </div>
+                  {/* Empresa */}
+                  <div>
+                    <div style={{ fontSize:9, color:"#5a6478", fontFamily:"monospace", textTransform:"uppercase",
+                      letterSpacing:".5px", marginBottom:5 }}>Empresa</div>
+                    <input type="text" value={form.company||""} onChange={e => setF("company", e.target.value)}
+                      placeholder="Ex: Acme Corp" style={inputStyle}/>
+                  </div>
+                  {/* Valor + Etapa lado a lado */}
+                  <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:12 }}>
+                    <div>
+                      <div style={{ fontSize:9, color:"#5a6478", fontFamily:"monospace", textTransform:"uppercase",
+                        letterSpacing:".5px", marginBottom:5 }}>Valor (R$) *</div>
+                      <input type="number" min="0" step="0.01" value={form.value||""}
+                        onChange={e => setF("value", e.target.value)} placeholder="0,00"
+                        style={{ ...inputStyle, borderColor: formErrors.value ? "#ef4444" : "rgba(255,255,255,.15)" }}/>
+                      {formErrors.value && <div style={{ fontSize:10, color:"#ef4444", marginTop:3 }}>{formErrors.value}</div>}
+                    </div>
+                    <div>
+                      <div style={{ fontSize:9, color:"#5a6478", fontFamily:"monospace", textTransform:"uppercase",
+                        letterSpacing:".5px", marginBottom:5 }}>Etapa *</div>
+                      <select value={form.stage||""} onChange={e => setF("stage", e.target.value)}
+                        style={{ ...inputStyle, cursor:"pointer", borderColor: formErrors.stage ? "#ef4444" : "rgba(255,255,255,.15)" }}>
+                        {PIPELINE_STAGE_KEYS.map(k => (
+                          <option key={k} value={k}>{PIPELINE_STAGE[k].label}</option>
+                        ))}
+                      </select>
+                      {formErrors.stage && <div style={{ fontSize:10, color:"#ef4444", marginTop:3 }}>{formErrors.stage}</div>}
+                    </div>
+                  </div>
+                </div>
+                <div style={{ display:"flex", gap:8, justifyContent:"flex-end",
+                  paddingTop:16, marginTop:4, borderTop:"1px solid rgba(255,255,255,.06)" }}>
+                  <button type="button" onClick={closeForm} disabled={saving}
+                    style={{ padding:"7px 16px", borderRadius:7, background:"rgba(255,255,255,.04)",
+                      border:"1px solid rgba(255,255,255,.1)", color:"#8892a4", fontSize:12,
+                      cursor:"pointer", fontFamily:"inherit" }}>Cancelar</button>
+                  <button type="submit" disabled={saving}
+                    style={{ padding:"7px 16px", borderRadius:7, background:"#4f6ef7",
+                      border:"none", color:"#fff", fontSize:12, fontWeight:500,
+                      cursor:"pointer", fontFamily:"inherit", display:"flex", alignItems:"center", gap:6 }}>
+                    {saving && <div style={{ width:12, height:12, borderRadius:"50%",
+                      border:"2px solid rgba(255,255,255,.3)", borderTopColor:"#fff",
+                      animation:"spin .6s linear infinite" }}/>}
+                    {saving ? "Salvando…" : editingDeal ? "Salvar alterações" : "Criar negociação"}
+                  </button>
+                </div>
+              </form>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
+
+      {/* Delete confirm */}
+      <AnimatePresence>
+        {confirmId && (
+          <div style={{ position:"fixed", inset:0, background:"rgba(0,0,0,.6)", zIndex:1100,
+            display:"flex", alignItems:"center", justifyContent:"center", backdropFilter:"blur(4px)" }}
+            onClick={() => setConfirmId(null)}>
+            <motion.div initial={{ scale:.9, opacity:0 }} animate={{ scale:1, opacity:1 }}
+              exit={{ scale:.9, opacity:0 }} transition={{ duration:.16 }}
+              onClick={e => e.stopPropagation()}
+              style={{ background:"#111520", border:"1px solid rgba(255,255,255,.1)", borderRadius:14,
+                padding:28, maxWidth:340, width:"100%", textAlign:"center",
+                boxShadow:"0 20px 60px rgba(0,0,0,.5)" }}>
+              <div style={{ fontSize:36, marginBottom:12 }}>🗑</div>
+              <div style={{ fontSize:16, fontWeight:600, color:"#e8eaf0", marginBottom:8 }}>Deletar negociação?</div>
+              <div style={{ fontSize:12, color:"#8892a4", marginBottom:24, lineHeight:1.6 }}>
+                Esta ação não pode ser desfeita.
+              </div>
+              <div style={{ display:"flex", gap:10, justifyContent:"center" }}>
+                <button onClick={() => setConfirmId(null)}
+                  style={{ padding:"8px 20px", borderRadius:8, background:"rgba(255,255,255,.04)",
+                    border:"1px solid rgba(255,255,255,.1)", color:"#8892a4", fontSize:12,
+                    cursor:"pointer", fontFamily:"inherit" }}>Cancelar</button>
+                <button onClick={() => handleDelete(confirmId)}
+                  style={{ padding:"8px 20px", borderRadius:8, background:"rgba(239,68,68,.15)",
+                    border:"1px solid rgba(239,68,68,.3)", color:"#ef4444", fontSize:12,
+                    fontWeight:600, cursor:"pointer", fontFamily:"inherit" }}>Deletar</button>
+              </div>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
+
+      <style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>
     </div>
   )
 }
@@ -1585,15 +1832,12 @@ export default function App() {
   const [detailClient, setDetailClient] = useState(null)
   const [dataLoading,  setDataLoading]  = useState(false)
 
-  // ── Estado local (sem Zustand) ────────────────────────────────
   const [clients, setClients] = useState([])
   const [deals,   setDeals]   = useState([])
   const [tasks,   setTasks]   = useState([])
 
-  // ── useDataLoader carrega tudo via Supabase ───────────────────
   useDataLoader(user, setClients, setDeals, setTasks)
 
-  // ── Keyboard shortcuts ─────────────────────────────────────────
   useEffect(() => {
     function handleKey(e) {
       if ((e.ctrlKey || e.metaKey) && e.key === "k") { e.preventDefault(); setPaletteOpen(v => !v); return }
@@ -1609,7 +1853,6 @@ export default function App() {
     return () => window.removeEventListener("keydown", handleKey)
   }, [])
 
-  // ── addActivity ───────────────────────────────────────────────
   async function addActivity(clientId) {
     const text = window.prompt("Descreva a atividade:")
     if (!text) return
@@ -1642,7 +1885,6 @@ export default function App() {
     pendingTasks: tasks.filter(t => !t.done).length,
   }), [clients, deals, tasks])
 
-  // ── Auth loading screen ───────────────────────────────────────
   if (authLoading) {
     return (
       <div style={{ minHeight:"100vh", background:"#0a0d14", display:"flex",
@@ -1836,7 +2078,7 @@ export default function App() {
           <AnimatePresence mode="wait">
             <motion.div key={activeTab} variants={pageVariants} initial="initial" animate="animate" exit="exit">
               {activeTab==="dashboard"     && <DashboardView  clients={clients} deals={deals}/>}
-              {activeTab==="pipeline"      && <PipelineView   deals={deals} setDeals={setDeals} addToast={addToast}/>}
+              {activeTab==="pipeline"      && <PipelineView   deals={deals} setDeals={setDeals} addToast={addToast} user={user}/>}
               {activeTab==="clients"       && <ClientsView    clients={clients} setClients={setClients} addToast={addToast} openClientModal={openClientModal} user={user} dataLoading={dataLoading}/>}
               {activeTab==="kanban"        && <KanbanPage     addToast={addToast}/>}
               {activeTab==="tasks"         && <TasksPage/>}
