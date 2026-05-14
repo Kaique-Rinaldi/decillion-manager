@@ -1,32 +1,88 @@
 // src/components/finance/FinancePage.jsx
-import { useState } from "react"
-import { motion, AnimatePresence } from "framer-motion"
-import { Plus } from "lucide-react"
+import { useState, useMemo } from "react"
+import { AnimatePresence, motion } from "framer-motion"
 import { useFinance } from "../../hooks/useFinance"
-import FinanceStats from "./FinanceStats"
-import FinanceFilters from "./FinanceFilters"
-import FinancialRecordList from "./FinancialRecordList"
 import FinanceDrawer from "./FinanceDrawer"
 import NewFinancialRecordModal from "./NewFinancialRecordModal"
+import FinancialRecordCard from "./FinancialRecordCard"
 
-const fadeUp = {
-  hidden: { opacity: 0, y: 18 },
-  show:   { opacity: 1, y: 0, transition: { duration: 0.4, ease: [0.22, 1, 0.36, 1] } },
+// ─── shared primitives (mirrors App.jsx) ───────────────────────
+const BADGE_COLOR = {
+  green:  { bg: "rgba(34,201,125,.12)",  color: "#22c97d" },
+  amber:  { bg: "rgba(245,158,11,.12)",  color: "#f59e0b" },
+  red:    { bg: "rgba(239,68,68,.12)",   color: "#ef4444" },
+  blue:   { bg: "rgba(79,110,247,.12)",  color: "#4f6ef7" },
+  purple: { bg: "rgba(167,139,250,.12)", color: "#a78bfa" },
+  gray:   { bg: "rgba(90,100,120,.15)",  color: "#8892a4" },
 }
 
-const stagger = {
-  show: { transition: { staggerChildren: 0.08 } },
+function StatCard({ label, value, sub, colorKey = "blue" }) {
+  const c = BADGE_COLOR[colorKey]
+  return (
+    <div style={{
+      background: "#111520", border: "1px solid rgba(255,255,255,.06)",
+      borderRadius: 12, padding: 16,
+    }}>
+      <div style={{
+        fontSize: 9, color: "#5a6478", textTransform: "uppercase",
+        letterSpacing: ".8px", fontFamily: "monospace", marginBottom: 8,
+      }}>{label}</div>
+      <div style={{
+        fontSize: 20, fontWeight: 600, color: "#e8eaf0",
+        letterSpacing: -0.5, fontFamily: "monospace",
+      }}>{value}</div>
+      {sub && (
+        <div style={{ fontSize: 10, color: "#5a6478", marginTop: 4, fontFamily: "monospace" }}>{sub}</div>
+      )}
+    </div>
+  )
 }
 
+function SectionLabel({ children }) {
+  return (
+    <div style={{
+      fontSize: 10, fontWeight: 600, color: "#5a6478", textTransform: "uppercase",
+      letterSpacing: ".8px", fontFamily: "monospace", marginBottom: 10,
+    }}>{children}</div>
+  )
+}
+
+// ─── filter tabs ────────────────────────────────────────────────
+const FILTER_TABS = [
+  { key: "all",     label: "Todos"     },
+  { key: "pending", label: "Pendentes" },
+  { key: "partial", label: "Parcial"   },
+  { key: "paid",    label: "Pagos"     },
+  { key: "overdue", label: "Atrasados" },
+]
+
+// ─── format helpers ─────────────────────────────────────────────
+const fmt = (v) =>
+  new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" }).format(v ?? 0)
+
+// ─── main page ──────────────────────────────────────────────────
 export default function FinancePage({ addToast }) {
   const {
     records, stats, loading, filters, setFilters,
-    reload, createRecord, updateRecord, removeRecord, refreshRecord,
+    createRecord, updateRecord, removeRecord, refreshRecord,
   } = useFinance(addToast)
 
   const [selectedRecord, setSelectedRecord] = useState(null)
   const [drawerOpen,     setDrawerOpen]     = useState(false)
   const [modalOpen,      setModalOpen]      = useState(false)
+  const [searchRaw,      setSearchRaw]      = useState("")
+
+  // client-side search (avoids re-fetching on every keystroke)
+  const filtered = useMemo(() => {
+    const q = searchRaw.trim().toLowerCase()
+    if (!q) return records
+    return records.filter(r =>
+      r.title?.toLowerCase().includes(q) ||
+      r.clients?.name?.toLowerCase().includes(q) ||
+      r.clients?.company?.toLowerCase().includes(q) ||
+      r.description?.toLowerCase().includes(q)
+    )
+  }, [records, searchRaw])
 
   const openDrawer = (record) => {
     setSelectedRecord(record)
@@ -38,11 +94,9 @@ export default function FinancePage({ addToast }) {
     setTimeout(() => setSelectedRecord(null), 300)
   }
 
-  const handleRecordUpdated = (updatedRecord) => {
-    refreshRecord(updatedRecord)
-    if (selectedRecord?.id === updatedRecord.id) {
-      setSelectedRecord(updatedRecord)
-    }
+  const handleRecordUpdated = (updated) => {
+    refreshRecord(updated)
+    if (selectedRecord?.id === updated.id) setSelectedRecord(updated)
   }
 
   const handleCreate = async (payload) => {
@@ -50,63 +104,189 @@ export default function FinancePage({ addToast }) {
     if (rec) setModalOpen(false)
   }
 
+  const handleDelete = async (id) => {
+    await removeRecord(id)
+    if (selectedRecord?.id === id) closeDrawer()
+  }
+
+  // chip style mirrors App.jsx
+  const chipStyle = (active) => ({
+    padding: "4px 10px", borderRadius: 20, fontSize: 11, cursor: "pointer",
+    border: "1px solid", fontFamily: "inherit", transition: "all .13s",
+    borderColor: active ? "#4f6ef7" : "rgba(255,255,255,.1)",
+    background: active ? "#4f6ef7" : "transparent",
+    color: active ? "#fff" : "#8892a4",
+  })
+
   return (
-    <>
-      <div className="finance-page">
-        {/* ── Header ────────────────────────────────────────── */}
-        <motion.div
-          className="finance-header"
-          variants={stagger}
-          initial="hidden"
-          animate="show"
-        >
-          <motion.div variants={fadeUp} className="finance-header__text">
-            <h1 className="finance-title">Financeiro</h1>
-            <p className="finance-subtitle">Visão geral das receitas e pagamentos</p>
-          </motion.div>
+    <div style={{ padding: 24 }}>
 
-          <motion.button
-            variants={fadeUp}
-            className="btn-primary"
-            onClick={() => setModalOpen(true)}
-            whileHover={{ scale: 1.02 }}
-            whileTap={{ scale: 0.97 }}
-          >
-            <Plus size={16} />
-            Novo registro
-          </motion.button>
-        </motion.div>
-
-        {/* ── Stats ─────────────────────────────────────────── */}
-        <FinanceStats stats={stats} loading={loading} />
-
-        {/* ── Filters ───────────────────────────────────────── */}
-        <FinanceFilters filters={filters} onChange={setFilters} />
-
-        {/* ── List ──────────────────────────────────────────── */}
-        <FinancialRecordList
-          records={records}
-          loading={loading}
-          onSelect={openDrawer}
-          onDelete={removeRecord}
-          selectedId={selectedRecord?.id}
+      {/* ── Stats ───────────────────────────────────────── */}
+      <div style={{
+        display: "grid", gridTemplateColumns: "repeat(4,1fr)",
+        gap: 12, marginBottom: 20,
+      }}>
+        <StatCard
+          label="Receita total"
+          value={fmt(stats?.totalRevenue)}
+          sub={`${stats?.countRecords ?? 0} registros`}
+          colorKey="blue"
+        />
+        <StatCard
+          label="Recebido"
+          value={fmt(stats?.totalReceived)}
+          sub={`${stats?.countPaid ?? 0} pagos`}
+          colorKey="green"
+        />
+        <StatCard
+          label="Pendências"
+          value={fmt(stats?.totalPending)}
+          sub={`${stats?.countPending ?? 0} registros`}
+          colorKey="amber"
+        />
+        <StatCard
+          label="Inadimplência"
+          value={fmt(stats?.totalOverdue)}
+          sub={`${stats?.countOverdue ?? 0} em atraso`}
+          colorKey="red"
         />
       </div>
 
-      {/* ── Drawer ────────────────────────────────────────────── */}
+      {/* ── Filters + actions ───────────────────────────── */}
+      <div style={{
+        display: "flex", gap: 8, marginBottom: 14,
+        alignItems: "center", flexWrap: "wrap",
+      }}>
+        {/* search */}
+        <div style={{
+          display: "flex", alignItems: "center", gap: 8,
+          background: "#161b2a", border: "1px solid rgba(255,255,255,.08)",
+          borderRadius: 7, padding: "6px 10px", flex: 1, minWidth: 200,
+        }}>
+          <svg width={13} height={13} viewBox="0 0 24 24" fill="none"
+            stroke="#5a6478" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round">
+            <path d="M21 21l-4.35-4.35M17 11A6 6 0 1 1 5 11a6 6 0 0 1 12 0z"/>
+          </svg>
+          <input
+            value={searchRaw}
+            onChange={e => setSearchRaw(e.target.value)}
+            placeholder="Buscar por cliente, título, descrição…"
+            style={{
+              background: "none", border: "none", outline: "none",
+              fontSize: 12, color: "#e8eaf0", fontFamily: "inherit", width: "100%",
+            }}
+          />
+          {searchRaw && (
+            <button onClick={() => setSearchRaw("")}
+              style={{ background: "none", border: "none", cursor: "pointer", color: "#5a6478", fontSize: 16, lineHeight: 1 }}>
+              ×
+            </button>
+          )}
+        </div>
+
+        {/* new record */}
+        <button
+          onClick={() => setModalOpen(true)}
+          style={{
+            display: "flex", alignItems: "center", gap: 6, padding: "7px 14px",
+            borderRadius: 7, background: "#4f6ef7", border: "none",
+            color: "#fff", fontSize: 12, fontWeight: 500, cursor: "pointer",
+            fontFamily: "inherit", flexShrink: 0,
+          }}
+        >
+          + Novo registro
+        </button>
+      </div>
+
+      {/* ── Filter chips ────────────────────────────────── */}
+      <div style={{ display: "flex", gap: 6, marginBottom: 14, flexWrap: "wrap", alignItems: "center" }}>
+        <span style={{ fontSize: 10, color: "#5a6478", fontFamily: "monospace" }}>STATUS:</span>
+        {FILTER_TABS.map(({ key, label }) => (
+          <button
+            key={key}
+            style={chipStyle(filters.status === key)}
+            onClick={() => setFilters(f => ({ ...f, status: key }))}
+          >
+            {label}
+          </button>
+        ))}
+      </div>
+
+      {/* ── Record list ─────────────────────────────────── */}
+      {loading ? (
+        <div style={{
+          background: "#111520", border: "1px solid rgba(255,255,255,.06)",
+          borderRadius: 12, overflow: "hidden",
+        }}>
+          {[1,2,3,4].map(i => <SkeletonRow key={i} />)}
+        </div>
+      ) : filtered.length === 0 ? (
+        <div style={{
+          background: "#111520", border: "1px solid rgba(255,255,255,.06)",
+          borderRadius: 12, padding: "48px 0", textAlign: "center",
+          color: "#5a6478", fontSize: 13,
+        }}>
+          {records.length === 0
+            ? "Nenhum registro financeiro ainda. Clique em \"+ Novo registro\" para começar."
+            : "Nenhum resultado para os filtros aplicados."}
+        </div>
+      ) : (
+        <div style={{
+          background: "#111520", border: "1px solid rgba(255,255,255,.06)",
+          borderRadius: 12, overflow: "hidden",
+        }}>
+          {/* table header */}
+          <div style={{
+            display: "grid",
+            gridTemplateColumns: "minmax(0,2fr) minmax(0,1.5fr) 100px 100px 90px 80px 28px",
+            gap: 0,
+            padding: "10px 16px",
+            borderBottom: "1px solid rgba(255,255,255,.05)",
+          }}>
+            {["Cliente / Título", "Progresso", "Total", "Recebido", "Restante", "Status", ""].map((h, i) => (
+              <div key={i} style={{
+                fontSize: 9, fontWeight: 600, textTransform: "uppercase",
+                letterSpacing: ".8px", color: "#5a6478", fontFamily: "monospace",
+                textAlign: i >= 2 && i <= 4 ? "right" : "left",
+              }}>{h}</div>
+            ))}
+          </div>
+
+          <AnimatePresence mode="popLayout">
+            {filtered.map((record, i) => (
+              <motion.div
+                key={record.id}
+                initial={{ opacity: 0, y: 6 }}
+                animate={{ opacity: 1, y: 0, transition: { delay: i * 0.03, duration: 0.2 } }}
+                exit={{ opacity: 0, transition: { duration: 0.15 } }}
+                layout
+              >
+                <FinancialRecordCard
+                  record={record}
+                  selected={selectedRecord?.id === record.id}
+                  onSelect={() => openDrawer(record)}
+                  onDelete={() => handleDelete(record.id)}
+                />
+              </motion.div>
+            ))}
+          </AnimatePresence>
+        </div>
+      )}
+
+      {/* ── Drawer ──────────────────────────────────────── */}
       <AnimatePresence>
         {drawerOpen && selectedRecord && (
           <FinanceDrawer
             record={selectedRecord}
             onClose={closeDrawer}
             onRecordUpdated={handleRecordUpdated}
-            onDelete={(id) => { removeRecord(id); closeDrawer() }}
+            onDelete={handleDelete}
             addToast={addToast}
           />
         )}
       </AnimatePresence>
 
-      {/* ── New Record Modal ──────────────────────────────────── */}
+      {/* ── New Record Modal ─────────────────────────────── */}
       <AnimatePresence>
         {modalOpen && (
           <NewFinancialRecordModal
@@ -116,102 +296,28 @@ export default function FinancePage({ addToast }) {
           />
         )}
       </AnimatePresence>
-
-      <style>{pageStyles}</style>
-    </>
+    </div>
   )
 }
 
-const pageStyles = `
-  @import url('https://fonts.googleapis.com/css2?family=Syne:wght@400;500;600;700;800&family=DM+Sans:wght@300;400;500&display=swap');
-
-  :root {
-    --bg-base:      #0a0a0f;
-    --bg-surface:   #111118;
-    --bg-elevated:  #18181f;
-    --bg-overlay:   #1f1f29;
-    --border:       rgba(255,255,255,0.07);
-    --border-hover: rgba(255,255,255,0.13);
-    --text-primary: #f0f0f6;
-    --text-secondary: #8888a0;
-    --text-muted:   #55556a;
-    --accent:       #6c63ff;
-    --accent-dim:   rgba(108,99,255,0.15);
-    --accent-glow:  rgba(108,99,255,0.35);
-    --green:        #22d3a5;
-    --green-dim:    rgba(34,211,165,0.12);
-    --amber:        #f59e0b;
-    --amber-dim:    rgba(245,158,11,0.12);
-    --red:          #f43f5e;
-    --red-dim:      rgba(244,63,94,0.12);
-    --blue:         #38bdf8;
-    --blue-dim:     rgba(56,189,248,0.12);
-    --radius-sm:    6px;
-    --radius-md:    12px;
-    --radius-lg:    18px;
-    --radius-xl:    24px;
-    --font-display: 'Syne', sans-serif;
-    --font-body:    'DM Sans', sans-serif;
-  }
-
-  .finance-page {
-    font-family: var(--font-body);
-    background: var(--bg-base);
-    min-height: 100vh;
-    padding: 40px 48px;
-    color: var(--text-primary);
-  }
-
-  .finance-header {
-    display: flex;
-    align-items: flex-end;
-    justify-content: space-between;
-    margin-bottom: 36px;
-    gap: 16px;
-    flex-wrap: wrap;
-  }
-
-  .finance-title {
-    font-family: var(--font-display);
-    font-size: 32px;
-    font-weight: 700;
-    letter-spacing: -0.5px;
-    color: var(--text-primary);
-    margin: 0 0 4px;
-    line-height: 1;
-  }
-
-  .finance-subtitle {
-    font-size: 14px;
-    color: var(--text-secondary);
-    margin: 0;
-    font-weight: 300;
-  }
-
-  .btn-primary {
-    display: flex;
-    align-items: center;
-    gap: 8px;
-    background: var(--accent);
-    color: #fff;
-    border: none;
-    border-radius: var(--radius-md);
-    padding: 10px 20px;
-    font-family: var(--font-body);
-    font-size: 14px;
-    font-weight: 500;
-    cursor: pointer;
-    white-space: nowrap;
-    box-shadow: 0 0 24px var(--accent-glow);
-    transition: box-shadow 0.2s, background 0.2s;
-  }
-  .btn-primary:hover {
-    background: #7c74ff;
-    box-shadow: 0 0 36px var(--accent-glow);
-  }
-
-  @media (max-width: 768px) {
-    .finance-page { padding: 20px 16px; }
-    .finance-title { font-size: 24px; }
-  }
-`
+function SkeletonRow() {
+  return (
+    <div style={{
+      display: "grid",
+      gridTemplateColumns: "minmax(0,2fr) minmax(0,1.5fr) 100px 100px 90px 80px 28px",
+      gap: 0, padding: "12px 16px",
+      borderBottom: "1px solid rgba(255,255,255,.03)",
+    }}>
+      {[120, 140, 70, 70, 60, 55, 20].map((w, i) => (
+        <div key={i} style={{
+          height: 12, borderRadius: 6, width: w,
+          background: "linear-gradient(90deg, #1c2236 25%, #252d42 50%, #1c2236 75%)",
+          backgroundSize: "400% 100%",
+          animation: "shimmer 1.4s ease infinite",
+          marginLeft: i >= 2 && i <= 4 ? "auto" : 0,
+        }} />
+      ))}
+      <style>{`@keyframes shimmer { to { background-position: -400% 0; } }`}</style>
+    </div>
+  )
+}

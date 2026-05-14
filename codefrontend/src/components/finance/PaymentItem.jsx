@@ -1,7 +1,5 @@
 // src/components/finance/PaymentItem.jsx
 import { useState } from "react"
-import { motion } from "framer-motion"
-import { Check, MoreHorizontal, CheckCircle2, Circle, Clock, AlertCircle, Copy, Pencil, Trash2 } from "lucide-react"
 
 const fmt = (v) =>
   new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" }).format(v ?? 0)
@@ -17,281 +15,192 @@ const METHOD_LABELS = {
   cash:        "Dinheiro",
 }
 
-const STATUS_ICON = {
-  paid:    <CheckCircle2 size={16} color="var(--green)" />,
-  pending: <Circle      size={16} color="var(--text-muted)" />,
-  overdue: <AlertCircle size={16} color="var(--red)" />,
+const STATUS_META = {
+  paid:    { color: "#22c97d", dotBg: "rgba(34,201,125,.15)", badge: "green", label: "Pago"    },
+  pending: { color: "#8892a4", dotBg: "rgba(90,100,120,.12)", badge: "gray",  label: "Pendente"},
+  overdue: { color: "#ef4444", dotBg: "rgba(239,68,68,.15)",  badge: "red",   label: "Atrasado"},
 }
 
-const STATUS_STYLE = {
-  paid:    { color: "var(--green)",         lineBg: "var(--green-dim)" },
-  pending: { color: "var(--text-secondary)", lineBg: "var(--bg-overlay)" },
-  overdue: { color: "var(--red)",            lineBg: "var(--red-dim)" },
+const BADGE_COLOR = {
+  green: { bg: "rgba(34,201,125,.12)",  color: "#22c97d" },
+  amber: { bg: "rgba(245,158,11,.12)",  color: "#f59e0b" },
+  red:   { bg: "rgba(239,68,68,.12)",   color: "#ef4444" },
+  gray:  { bg: "rgba(90,100,120,.15)",  color: "#8892a4" },
+}
+
+function Badge({ colorKey, label }) {
+  const s = BADGE_COLOR[colorKey] ?? BADGE_COLOR.gray
+  return (
+    <span style={{
+      display: "inline-flex", alignItems: "center", gap: 3, padding: "2px 6px",
+      borderRadius: 4, fontSize: 9, fontWeight: 700, fontFamily: "monospace",
+      textTransform: "uppercase", letterSpacing: ".3px", background: s.bg, color: s.color,
+    }}>
+      <span style={{ width: 4, height: 4, borderRadius: "50%", background: s.color, display: "inline-block" }} />
+      {label}
+    </span>
+  )
 }
 
 export default function PaymentItem({ payment, isLast, onMarkPaid, onEdit, onDelete, onDuplicate }) {
   const [menuOpen, setMenuOpen] = useState(false)
-  const st = STATUS_STYLE[payment.status] || STATUS_STYLE.pending
+  const [hovered,  setHovered]  = useState(false)
+  const sm = STATUS_META[payment.status] || STATUS_META.pending
 
   return (
-    <>
-      <div className="payment-item">
-        {/* Timeline line */}
-        <div className="payment-item__track">
-          <div className="payment-item__dot" style={{ color: st.color }}>
-            {STATUS_ICON[payment.status] || STATUS_ICON.pending}
-          </div>
-          {!isLast && <div className="payment-item__line" />}
+    <div
+      style={{ display: "flex", gap: 10, alignItems: "stretch" }}
+      onMouseEnter={() => setHovered(true)}
+      onMouseLeave={() => { setHovered(false); setMenuOpen(false) }}
+    >
+      {/* timeline track */}
+      <div style={{
+        display: "flex", flexDirection: "column", alignItems: "center",
+        paddingTop: 14, flexShrink: 0, width: 18,
+      }}>
+        <div style={{
+          width: 14, height: 14, borderRadius: "50%",
+          background: sm.dotBg, border: `1px solid ${sm.color}44`,
+          display: "flex", alignItems: "center", justifyContent: "center",
+          fontSize: 7, color: sm.color, flexShrink: 0,
+        }}>
+          {payment.status === "paid" ? "✓" : payment.status === "overdue" ? "!" : "○"}
         </div>
-
-        {/* Body */}
-        <div className={`payment-item__body ${payment.status === "paid" ? "payment-item__body--paid" : ""}`}>
-          <div className="payment-item__row">
-            <div className="payment-item__main">
-              <span className="payment-item__title">{payment.title}</span>
-              <div className="payment-item__meta">
-                <span className="payment-meta-chip">{METHOD_LABELS[payment.payment_method] || payment.payment_method}</span>
-                {payment.due_date && (
-                  <span className="payment-meta-date">
-                    <Clock size={10} /> {fmtDate(payment.due_date)}
-                  </span>
-                )}
-                {payment.paid_at && payment.status === "paid" && (
-                  <span className="payment-meta-paid">
-                    <Check size={10} /> Pago em {fmtDate(payment.paid_at)}
-                  </span>
-                )}
-              </div>
-            </div>
-
-            <div className="payment-item__right">
-              <span className="payment-item__amount" style={{ color: st.color }}>
-                {fmt(payment.amount)}
-              </span>
-
-              <div className="payment-item__actions">
-                {payment.status !== "paid" && (
-                  <motion.button
-                    className="pay-btn"
-                    title="Marcar como pago"
-                    onClick={onMarkPaid}
-                    whileHover={{ scale: 1.05 }}
-                    whileTap={{ scale: 0.95 }}
-                  >
-                    <Check size={12} />
-                  </motion.button>
-                )}
-
-                <div style={{ position: "relative" }}>
-                  <button
-                    className="pay-menu-btn"
-                    onClick={() => setMenuOpen(v => !v)}
-                  >
-                    <MoreHorizontal size={14} />
-                  </button>
-
-                  {menuOpen && (
-                    <div className="pay-menu" onClick={() => setMenuOpen(false)}>
-                      {payment.status !== "paid" && (
-                        <button className="pay-menu__item" onClick={onMarkPaid}>
-                          <CheckCircle2 size={13} /> Marcar como pago
-                        </button>
-                      )}
-                      <button className="pay-menu__item" onClick={onEdit}>
-                        <Pencil size={13} /> Editar
-                      </button>
-                      <button className="pay-menu__item" onClick={onDuplicate}>
-                        <Copy size={13} /> Duplicar
-                      </button>
-                      <div className="pay-menu__divider" />
-                      <button className="pay-menu__item pay-menu__item--danger" onClick={onDelete}>
-                        <Trash2 size={13} /> Excluir
-                      </button>
-                    </div>
-                  )}
-                </div>
-              </div>
-            </div>
-          </div>
-
-          {payment.notes && (
-            <p className="payment-item__notes">{payment.notes}</p>
-          )}
-        </div>
+        {!isLast && (
+          <div style={{
+            width: 1, flex: 1, background: "rgba(255,255,255,.07)",
+            margin: "5px 0", minHeight: 16,
+          }} />
+        )}
       </div>
 
-      <style>{css}</style>
-    </>
+      {/* body */}
+      <div style={{
+        flex: 1, background: hovered ? "#1a1f30" : "#161b2a",
+        border: "1px solid rgba(255,255,255,.06)", borderRadius: 9,
+        padding: "10px 12px", marginBottom: isLast ? 0 : 8,
+        opacity: payment.status === "paid" ? .7 : 1,
+        transition: "background .12s, opacity .2s",
+      }}>
+        <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", gap: 10 }}>
+          <div style={{ flex: 1, minWidth: 0 }}>
+            {/* title + badge */}
+            <div style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 4, flexWrap: "wrap" }}>
+              <span style={{ fontSize: 12, fontWeight: 500, color: "#e8eaf0" }}>
+                {payment.title}
+              </span>
+              <Badge colorKey={sm.badge} label={sm.label} />
+            </div>
+
+            {/* meta row */}
+            <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center" }}>
+              <span style={{
+                fontSize: 9, fontFamily: "monospace", padding: "1px 5px",
+                background: "#1c2236", borderRadius: 3,
+                border: "1px solid rgba(255,255,255,.06)", color: "#5a6478",
+              }}>
+                {METHOD_LABELS[payment.payment_method] || payment.payment_method}
+              </span>
+              {payment.due_date && (
+                <span style={{ fontSize: 10, color: "#5a6478", fontFamily: "monospace" }}>
+                  venc. {fmtDate(payment.due_date)}
+                </span>
+              )}
+              {payment.paid_at && payment.status === "paid" && (
+                <span style={{ fontSize: 10, color: "#22c97d", fontFamily: "monospace" }}>
+                  ✓ {fmtDate(payment.paid_at)}
+                </span>
+              )}
+            </div>
+
+            {payment.notes && (
+              <p style={{
+                fontSize: 11, color: "#5a6478", marginTop: 6, lineHeight: 1.5,
+                fontStyle: "italic", borderTop: "1px solid rgba(255,255,255,.05)",
+                paddingTop: 6,
+              }}>{payment.notes}</p>
+            )}
+          </div>
+
+          {/* right: amount + actions */}
+          <div style={{ display: "flex", alignItems: "center", gap: 8, flexShrink: 0 }}>
+            <span style={{
+              fontSize: 13, fontWeight: 600, color: sm.color,
+              fontFamily: "monospace", whiteSpace: "nowrap",
+            }}>
+              {fmt(payment.amount)}
+            </span>
+
+            {/* mark paid */}
+            {payment.status !== "paid" && (
+              <button
+                onClick={onMarkPaid}
+                title="Marcar como pago"
+                style={{
+                  width: 24, height: 24, borderRadius: 5,
+                  background: "rgba(34,201,125,.1)", border: "1px solid rgba(34,201,125,.2)",
+                  color: "#22c97d", cursor: "pointer",
+                  display: "flex", alignItems: "center", justifyContent: "center", fontSize: 11,
+                }}
+              >✓</button>
+            )}
+
+            {/* menu */}
+            <div style={{ position: "relative" }}>
+              <button
+                onClick={() => setMenuOpen(v => !v)}
+                style={{
+                  width: 24, height: 24, borderRadius: 5,
+                  background: menuOpen ? "#1c2236" : "none",
+                  border: "1px solid rgba(255,255,255,.08)",
+                  color: "#5a6478", cursor: "pointer",
+                  display: "flex", alignItems: "center", justifyContent: "center", fontSize: 13,
+                  opacity: hovered || menuOpen ? 1 : 0, transition: "opacity .15s",
+                }}
+              >⋯</button>
+
+              {menuOpen && (
+                <div
+                  onClick={() => setMenuOpen(false)}
+                  style={{
+                    position: "absolute", right: 0, top: "calc(100% + 4px)",
+                    background: "#111520", border: "1px solid rgba(255,255,255,.1)",
+                    borderRadius: 8, padding: 4, zIndex: 300, minWidth: 160,
+                    boxShadow: "0 8px 32px rgba(0,0,0,.45)",
+                  }}
+                >
+                  {payment.status !== "paid" && (
+                    <MenuItem label="✓ Marcar como pago" onClick={onMarkPaid} />
+                  )}
+                  <MenuItem label="✎ Editar" onClick={onEdit} />
+                  <MenuItem label="⧉ Duplicar" onClick={onDuplicate} />
+                  <div style={{ height: 1, background: "rgba(255,255,255,.06)", margin: "3px 0" }} />
+                  <MenuItem label="🗑 Excluir" onClick={onDelete} danger />
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
   )
 }
 
-const css = `
-  .payment-item {
-    display: flex;
-    gap: 12px;
-    align-items: stretch;
-  }
-
-  .payment-item__track {
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    padding-top: 14px;
-    flex-shrink: 0;
-    width: 20px;
-  }
-  .payment-item__dot { line-height: 0; }
-  .payment-item__line {
-    width: 1px;
-    flex: 1;
-    background: var(--border);
-    margin: 6px 0;
-    min-height: 20px;
-  }
-
-  .payment-item__body {
-    flex: 1;
-    background: var(--bg-elevated);
-    border: 1px solid var(--border);
-    border-radius: var(--radius-md);
-    padding: 12px 14px;
-    margin-bottom: 8px;
-    transition: border-color 0.2s;
-  }
-  .payment-item__body--paid {
-    opacity: 0.65;
-  }
-  .payment-item__body:hover { border-color: var(--border-hover); }
-
-  .payment-item__row {
-    display: flex;
-    align-items: flex-start;
-    justify-content: space-between;
-    gap: 12px;
-  }
-  .payment-item__main { flex: 1; min-width: 0; }
-
-  .payment-item__title {
-    font-size: 14px;
-    font-weight: 500;
-    color: var(--text-primary);
-    display: block;
-    margin-bottom: 5px;
-  }
-
-  .payment-item__meta {
-    display: flex;
-    flex-wrap: wrap;
-    gap: 6px;
-    align-items: center;
-  }
-
-  .payment-meta-chip {
-    font-size: 10px;
-    padding: 2px 7px;
-    background: var(--bg-overlay);
-    border-radius: 99px;
-    color: var(--text-muted);
-    letter-spacing: 0.03em;
-    text-transform: uppercase;
-  }
-
-  .payment-meta-date,
-  .payment-meta-paid {
-    display: flex;
-    align-items: center;
-    gap: 3px;
-    font-size: 11px;
-    color: var(--text-muted);
-  }
-  .payment-meta-paid { color: var(--green); }
-
-  .payment-item__right {
-    display: flex;
-    align-items: center;
-    gap: 10px;
-    flex-shrink: 0;
-  }
-
-  .payment-item__amount {
-    font-family: var(--font-display);
-    font-size: 15px;
-    font-weight: 700;
-    letter-spacing: -0.3px;
-    white-space: nowrap;
-  }
-
-  .payment-item__actions { display: flex; gap: 4px; align-items: center; }
-
-  .pay-btn {
-    width: 26px;
-    height: 26px;
-    background: var(--green-dim);
-    border: 1px solid rgba(34,211,165,0.25);
-    border-radius: var(--radius-sm);
-    color: var(--green);
-    cursor: pointer;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    transition: background 0.15s, box-shadow 0.15s;
-  }
-  .pay-btn:hover { background: rgba(34,211,165,0.2); box-shadow: 0 0 10px rgba(34,211,165,0.25); }
-
-  .pay-menu-btn {
-    width: 26px;
-    height: 26px;
-    background: none;
-    border: 1px solid transparent;
-    border-radius: var(--radius-sm);
-    color: var(--text-muted);
-    cursor: pointer;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    transition: background 0.15s, border-color 0.15s, color 0.15s;
-  }
-  .pay-menu-btn:hover { background: var(--bg-overlay); border-color: var(--border); color: var(--text-primary); }
-
-  .pay-menu {
-    position: absolute;
-    right: 0;
-    top: calc(100% + 4px);
-    background: var(--bg-elevated);
-    border: 1px solid var(--border);
-    border-radius: var(--radius-md);
-    padding: 4px;
-    z-index: 300;
-    min-width: 168px;
-    box-shadow: 0 8px 32px rgba(0,0,0,0.45);
-  }
-  .pay-menu__item {
-    display: flex;
-    align-items: center;
-    gap: 8px;
-    width: 100%;
-    padding: 8px 10px;
-    border: none;
-    background: none;
-    font-family: var(--font-body);
-    font-size: 13px;
-    color: var(--text-secondary);
-    border-radius: var(--radius-sm);
-    cursor: pointer;
-    transition: background 0.15s, color 0.15s;
-    text-align: left;
-  }
-  .pay-menu__item:hover { background: var(--bg-overlay); color: var(--text-primary); }
-  .pay-menu__item--danger:hover { color: var(--red); }
-  .pay-menu__divider { height: 1px; background: var(--border); margin: 3px 0; }
-
-  .payment-item__notes {
-    font-size: 12px;
-    color: var(--text-muted);
-    margin: 8px 0 0;
-    padding-top: 8px;
-    border-top: 1px solid var(--border);
-    font-style: italic;
-    line-height: 1.5;
-  }
-`
+function MenuItem({ label, onClick, danger }) {
+  const [hov, setHov] = useState(false)
+  return (
+    <button
+      onClick={onClick}
+      onMouseEnter={() => setHov(true)}
+      onMouseLeave={() => setHov(false)}
+      style={{
+        display: "flex", alignItems: "center", gap: 8, width: "100%",
+        padding: "7px 10px", border: "none",
+        background: hov ? "#161b2a" : "none",
+        fontFamily: "inherit", fontSize: 12,
+        color: danger ? "#ef4444" : hov ? "#e8eaf0" : "#8892a4",
+        borderRadius: 5, cursor: "pointer", textAlign: "left",
+      }}
+    >{label}</button>
+  )
+}

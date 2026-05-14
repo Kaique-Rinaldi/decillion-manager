@@ -1,21 +1,12 @@
 // src/components/finance/NewFinancialRecordModal.jsx
 import { useState, useEffect } from "react"
-import { motion } from "framer-motion"
-import { X } from "lucide-react"
+import { motion, AnimatePresence } from "framer-motion"
 import { supabase } from "../../lib/supabase"
 
-const overlay = {
-  hidden: { opacity: 0 },
-  show:   { opacity: 1 },
-}
-const panel = {
-  hidden: { opacity: 0, scale: 0.96, y: 10 },
-  show:   { opacity: 1, scale: 1,    y: 0,  transition: { type: "spring", stiffness: 380, damping: 36 } },
-}
-
 export default function NewFinancialRecordModal({ onClose, onCreate, addToast }) {
-  const [clients,  setClients]  = useState([])
-  const [saving,   setSaving]   = useState(false)
+  const [clients, setClients] = useState([])
+  const [saving,  setSaving]  = useState(false)
+  const [errors,  setErrors]  = useState({})
   const [form, setForm] = useState({
     client_id:    "",
     title:        "",
@@ -31,55 +22,114 @@ export default function NewFinancialRecordModal({ onClose, onCreate, addToast })
       .from("clients")
       .select("id, name, company")
       .order("name")
-      .then(({ data }) => setClients(data ?? []))
+      .then(({ data, error }) => {
+        if (!error) setClients(data ?? [])
+      })
   }, [])
 
-  const set = (k, v) => setForm(f => ({ ...f, [k]: v }))
+  const set = (k, v) => {
+    setForm(f => ({ ...f, [k]: v }))
+    setErrors(e => ({ ...e, [k]: "" }))
+  }
 
-  const handleSubmit = async () => {
-    if (!form.client_id || !form.title.trim() || !form.total_amount) {
-      addToast?.("Preencha cliente, título e valor total.", "warning")
-      return
-    }
+  const validate = () => {
+    const e = {}
+    if (!form.client_id)       e.client_id    = "Selecione um cliente"
+    if (!form.title?.trim())   e.title        = "Título obrigatório"
+    if (!form.total_amount || Number(form.total_amount) <= 0)
+                               e.total_amount = "Valor deve ser > 0"
+    return e
+  }
+
+  const handleSubmit = async (ev) => {
+    ev.preventDefault()
+    const errs = validate()
+    if (Object.keys(errs).length) { setErrors(errs); return }
     setSaving(true)
     try {
-      await onCreate(form)
+      await onCreate({
+        ...form,
+        total_amount: Number(form.total_amount),
+      })
+    } catch {
+      // error toasted by useFinance
     } finally {
       setSaving(false)
     }
   }
 
+  const inputStyle = (err) => ({
+    background: "#161b2a",
+    border: `1px solid ${err ? "#ef4444" : "rgba(255,255,255,.15)"}`,
+    borderRadius: 7, padding: "7px 10px", fontSize: 12, color: "#e8eaf0",
+    fontFamily: "inherit", outline: "none", width: "100%", boxSizing: "border-box",
+    transition: "border-color .15s",
+  })
+
+  const labelStyle = {
+    fontSize: 9, color: "#5a6478", fontFamily: "monospace",
+    textTransform: "uppercase", letterSpacing: ".5px", marginBottom: 5, display: "block",
+  }
+
   return (
-    <>
+    <div
+      style={{
+        position: "fixed", inset: 0, background: "rgba(0,0,0,.6)",
+        zIndex: 1500, display: "flex", alignItems: "center", justifyContent: "center",
+        padding: 20, backdropFilter: "blur(4px)",
+      }}
+      onClick={onClose}
+    >
       <motion.div
-        className="modal-overlay"
-        variants={overlay}
-        initial="hidden"
-        animate="show"
-        exit="hidden"
-        onClick={onClose}
-      />
-
-      <div className="modal-wrap">
-        <motion.div
-          className="modal-panel"
-          variants={panel}
-          initial="hidden"
-          animate="show"
-          exit="hidden"
-        >
-          <div className="modal-header">
-            <h2 className="modal-title">Novo registro financeiro</h2>
-            <button className="modal-close" onClick={onClose}><X size={16} /></button>
+        initial={{ scale: .93, opacity: 0, y: 10 }}
+        animate={{ scale: 1, opacity: 1, y: 0 }}
+        exit={{ scale: .93, opacity: 0 }}
+        transition={{ duration: .18 }}
+        onClick={e => e.stopPropagation()}
+        style={{
+          background: "#111520", border: "1px solid rgba(255,255,255,.1)",
+          borderRadius: 16, width: "100%", maxWidth: 560,
+          maxHeight: "90vh", overflowY: "auto",
+          boxShadow: "0 20px 60px rgba(0,0,0,.5)",
+        }}
+      >
+        {/* header */}
+        <div style={{
+          padding: "20px 24px 0",
+          display: "flex", alignItems: "center", justifyContent: "space-between",
+        }}>
+          <div style={{ fontSize: 16, fontWeight: 600, color: "#e8eaf0" }}>
+            ➕ Novo registro financeiro
           </div>
+          <button
+            onClick={onClose}
+            style={{
+              background: "none", border: "1px solid rgba(255,255,255,.1)",
+              borderRadius: 7, color: "#8892a4", cursor: "pointer",
+              width: 30, height: 30, display: "flex", alignItems: "center",
+              justifyContent: "center", fontSize: 18,
+            }}
+          >×</button>
+        </div>
 
-          <div className="modal-body">
-            <div className="field">
-              <label className="field-label">Cliente *</label>
+        <form onSubmit={handleSubmit} noValidate style={{ padding: "20px 24px 24px" }}>
+
+          {/* section: contato */}
+          <div style={{
+            fontSize: 9, color: "#5a6478", textTransform: "uppercase",
+            letterSpacing: ".7px", fontFamily: "monospace", marginBottom: 10,
+            paddingBottom: 8, borderBottom: "1px solid rgba(255,255,255,.06)",
+          }}>Dados do registro</div>
+
+          <div style={{ display: "grid", gap: 12, marginBottom: 12 }}>
+
+            {/* client */}
+            <div>
+              <label style={labelStyle}>Cliente *</label>
               <select
-                className="field-select"
                 value={form.client_id}
                 onChange={e => set("client_id", e.target.value)}
+                style={{ ...inputStyle(errors.client_id), cursor: "pointer", appearance: "none" }}
               >
                 <option value="">Selecionar cliente…</option>
                 {clients.map(c => (
@@ -88,206 +138,123 @@ export default function NewFinancialRecordModal({ onClose, onCreate, addToast })
                   </option>
                 ))}
               </select>
+              {errors.client_id && <div style={{ fontSize: 10, color: "#ef4444", marginTop: 3 }}>{errors.client_id}</div>}
             </div>
 
-            <div className="field">
-              <label className="field-label">Título do serviço *</label>
+            {/* title */}
+            <div>
+              <label style={labelStyle}>Título do serviço *</label>
               <input
-                className="field-input"
-                placeholder="Ex: Website Institucional"
+                type="text"
                 value={form.title}
                 onChange={e => set("title", e.target.value)}
+                placeholder="Ex: Website Institucional"
+                style={inputStyle(errors.title)}
               />
+              {errors.title && <div style={{ fontSize: 10, color: "#ef4444", marginTop: 3 }}>{errors.title}</div>}
             </div>
 
-            <div className="field">
-              <label className="field-label">Descrição</label>
+            {/* description */}
+            <div>
+              <label style={labelStyle}>Descrição</label>
               <textarea
-                className="field-input field-textarea"
-                placeholder="Descrição do projeto ou serviço"
-                rows={2}
                 value={form.description}
                 onChange={e => set("description", e.target.value)}
+                placeholder="Descrição do projeto ou serviço"
+                rows={2}
+                style={{ ...inputStyle(false), resize: "vertical", minHeight: 60 }}
               />
             </div>
 
-            <div className="field-row">
-              <div className="field">
-                <label className="field-label">Valor total *</label>
-                <input
-                  className="field-input"
-                  type="number"
-                  min="0"
-                  step="0.01"
-                  placeholder="0,00"
-                  value={form.total_amount}
-                  onChange={e => set("total_amount", e.target.value)}
-                />
-              </div>
+            {/* value */}
+            <div>
+              <label style={labelStyle}>Valor total (R$) *</label>
+              <input
+                type="number"
+                min="0"
+                step="0.01"
+                value={form.total_amount}
+                onChange={e => set("total_amount", e.target.value)}
+                placeholder="0,00"
+                style={inputStyle(errors.total_amount)}
+              />
+              {errors.total_amount && <div style={{ fontSize: 10, color: "#ef4444", marginTop: 3 }}>{errors.total_amount}</div>}
             </div>
 
-            <div className="field-row">
-              <div className="field">
-                <label className="field-label">Data início</label>
+            {/* dates */}
+            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
+              <div>
+                <label style={labelStyle}>Data início</label>
                 <input
-                  className="field-input"
                   type="date"
                   value={form.start_date}
                   onChange={e => set("start_date", e.target.value)}
+                  style={{ ...inputStyle(false), colorScheme: "dark" }}
                 />
               </div>
-              <div className="field">
-                <label className="field-label">Vencimento</label>
+              <div>
+                <label style={labelStyle}>Vencimento</label>
                 <input
-                  className="field-input"
                   type="date"
                   value={form.due_date}
                   onChange={e => set("due_date", e.target.value)}
+                  style={{ ...inputStyle(false), colorScheme: "dark" }}
                 />
               </div>
             </div>
 
-            <div className="field">
-              <label className="field-label">Notas internas</label>
+            {/* notes */}
+            <div>
+              <label style={labelStyle}>Notas internas</label>
               <textarea
-                className="field-input field-textarea"
-                placeholder="Observações internas"
-                rows={2}
                 value={form.notes}
                 onChange={e => set("notes", e.target.value)}
+                placeholder="Observações internas"
+                rows={2}
+                style={{ ...inputStyle(false), resize: "vertical", minHeight: 60 }}
               />
             </div>
           </div>
 
-          <div className="modal-footer">
-            <button className="btn-ghost" onClick={onClose} disabled={saving}>
-              Cancelar
-            </button>
-            <motion.button
-              className="btn-primary"
-              onClick={handleSubmit}
+          {/* actions */}
+          <div style={{
+            display: "flex", gap: 8, justifyContent: "flex-end",
+            paddingTop: 16, borderTop: "1px solid rgba(255,255,255,.06)",
+          }}>
+            <button
+              type="button"
+              onClick={onClose}
               disabled={saving}
-              whileHover={{ scale: 1.02 }}
-              whileTap={{ scale: 0.97 }}
+              style={{
+                padding: "7px 16px", borderRadius: 7,
+                background: "rgba(255,255,255,.04)", border: "1px solid rgba(255,255,255,.1)",
+                color: "#8892a4", fontSize: 12, cursor: "pointer", fontFamily: "inherit",
+              }}
+            >Cancelar</button>
+            <button
+              type="submit"
+              disabled={saving}
+              style={{
+                padding: "7px 16px", borderRadius: 7, background: "#4f6ef7",
+                border: "none", color: "#fff", fontSize: 12, fontWeight: 500,
+                cursor: saving ? "not-allowed" : "pointer", fontFamily: "inherit",
+                display: "flex", alignItems: "center", gap: 6, opacity: saving ? .7 : 1,
+              }}
             >
+              {saving && (
+                <div style={{
+                  width: 12, height: 12, borderRadius: "50%",
+                  border: "2px solid rgba(255,255,255,.3)", borderTopColor: "#fff",
+                  animation: "spin .6s linear infinite",
+                }} />
+              )}
               {saving ? "Criando…" : "Criar registro"}
-            </motion.button>
+            </button>
           </div>
-        </motion.div>
-      </div>
+        </form>
 
-      <style>{css}</style>
-    </>
+        <style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>
+      </motion.div>
+    </div>
   )
 }
-
-const css = `
-  .modal-overlay {
-    position: fixed;
-    inset: 0;
-    background: rgba(0,0,0,0.6);
-    backdrop-filter: blur(3px);
-    z-index: 400;
-  }
-  .modal-wrap {
-    position: fixed;
-    inset: 0;
-    z-index: 401;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    padding: 20px;
-  }
-  .modal-panel {
-    background: var(--bg-surface);
-    border: 1px solid var(--border);
-    border-radius: var(--radius-xl);
-    width: 100%;
-    max-width: 520px;
-    max-height: 90vh;
-    display: flex;
-    flex-direction: column;
-    overflow: hidden;
-    box-shadow: 0 24px 80px rgba(0,0,0,0.6);
-  }
-  .modal-header {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    padding: 22px 24px 18px;
-    border-bottom: 1px solid var(--border);
-  }
-  .modal-title {
-    font-family: var(--font-display);
-    font-size: 17px;
-    font-weight: 700;
-    color: var(--text-primary);
-    margin: 0;
-    letter-spacing: -0.3px;
-  }
-  .modal-close {
-    width: 30px; height: 30px;
-    background: none; border: 1px solid var(--border);
-    border-radius: var(--radius-sm); color: var(--text-secondary);
-    cursor: pointer; display: flex; align-items: center; justify-content: center;
-    transition: background 0.15s, color 0.15s;
-  }
-  .modal-close:hover { background: var(--bg-overlay); color: var(--text-primary); }
-
-  .modal-body {
-    padding: 20px 24px;
-    overflow-y: auto;
-    display: flex;
-    flex-direction: column;
-    gap: 14px;
-    scrollbar-width: thin;
-    scrollbar-color: var(--bg-overlay) transparent;
-  }
-  .modal-footer {
-    padding: 16px 24px;
-    border-top: 1px solid var(--border);
-    display: flex;
-    gap: 10px;
-    justify-content: flex-end;
-  }
-
-  .field { display: flex; flex-direction: column; gap: 6px; flex: 1; }
-  .field-row { display: flex; gap: 12px; }
-  .field-label {
-    font-size: 12px;
-    color: var(--text-secondary);
-    font-weight: 500;
-    text-transform: uppercase;
-    letter-spacing: 0.05em;
-  }
-  .field-input, .field-select {
-    background: var(--bg-elevated);
-    border: 1px solid var(--border);
-    border-radius: var(--radius-md);
-    padding: 9px 12px;
-    font-family: var(--font-body);
-    font-size: 14px;
-    color: var(--text-primary);
-    outline: none;
-    transition: border-color 0.2s, box-shadow 0.2s;
-    width: 100%;
-    box-sizing: border-box;
-  }
-  .field-input:focus, .field-select:focus {
-    border-color: var(--accent);
-    box-shadow: 0 0 0 3px var(--accent-dim);
-  }
-  .field-input::placeholder { color: var(--text-muted); }
-  .field-textarea { resize: vertical; min-height: 60px; }
-  .field-select { appearance: none; cursor: pointer; }
-  .field-select option { background: var(--bg-elevated); }
-
-  .btn-ghost {
-    background: none; border: 1px solid var(--border);
-    border-radius: var(--radius-md); padding: 9px 18px;
-    font-family: var(--font-body); font-size: 14px;
-    color: var(--text-secondary); cursor: pointer;
-    transition: background 0.15s, color 0.15s;
-  }
-  .btn-ghost:hover { background: var(--bg-overlay); color: var(--text-primary); }
-`

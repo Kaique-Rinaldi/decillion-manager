@@ -1,7 +1,6 @@
 // src/components/finance/PaymentTimeline.jsx
 import { useState } from "react"
 import { motion, AnimatePresence } from "framer-motion"
-import { Plus } from "lucide-react"
 import PaymentItem from "./PaymentItem"
 import NewPaymentModal from "./NewPaymentModal"
 
@@ -10,7 +9,7 @@ export default function PaymentTimeline({
   onAdd, onEdit, onMarkPaid, onDelete, onDuplicate,
   addToast,
 }) {
-  const [modalOpen, setModalOpen] = useState(false)
+  const [modalOpen,      setModalOpen]      = useState(false)
   const [editingPayment, setEditingPayment] = useState(null)
 
   const handleAdd = async (form) => {
@@ -25,65 +24,73 @@ export default function PaymentTimeline({
 
   if (loading) {
     return (
-      <div className="timeline-loading">
-        {[1,2,3].map(i => <div key={i} className="skeleton skeleton--timeline-item" />)}
-        <style>{`
-          .timeline-loading { display: flex; flex-direction: column; gap: 10px; }
-          .skeleton--timeline-item { height: 60px; border-radius: var(--radius-md); width: 100%; }
-        `}</style>
+      <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+        {[1,2,3].map(i => (
+          <div key={i} style={{
+            height: 58, borderRadius: 9,
+            background: "linear-gradient(90deg, #1c2236 25%, #252d42 50%, #1c2236 75%)",
+            backgroundSize: "400% 100%",
+            animation: "shimmer 1.4s ease infinite",
+          }} />
+        ))}
+        <style>{`@keyframes shimmer { to { background-position: -400% 0; } }`}</style>
       </div>
     )
   }
 
   return (
     <>
-      <div className="timeline">
-        {/* Header */}
-        <div className="timeline-header">
-          <p className="timeline-count">
-            {payments.length} {payments.length === 1 ? "pagamento" : "pagamentos"}
-          </p>
-          <motion.button
-            className="btn-add-payment"
-            onClick={() => setModalOpen(true)}
-            whileHover={{ scale: 1.02 }}
-            whileTap={{ scale: 0.97 }}
-          >
-            <Plus size={14} /> Novo pagamento
-          </motion.button>
-        </div>
-
-        {/* Items */}
-        {payments.length === 0 ? (
-          <div className="timeline-empty">
-            <p>Nenhum pagamento ainda.</p>
-            <p>Adicione o primeiro para começar o acompanhamento.</p>
-          </div>
-        ) : (
-          <div className="timeline-list">
-            <AnimatePresence mode="popLayout">
-              {payments.map((payment, i) => (
-                <motion.div
-                  key={payment.id}
-                  initial={{ opacity: 0, x: -10 }}
-                  animate={{ opacity: 1, x: 0, transition: { delay: i * 0.05, duration: 0.3 } }}
-                  exit={{ opacity: 0, scale: 0.95 }}
-                  layout
-                >
-                  <PaymentItem
-                    payment={payment}
-                    isLast={i === payments.length - 1}
-                    onMarkPaid={() => onMarkPaid(payment.id)}
-                    onEdit={() => setEditingPayment(payment)}
-                    onDelete={() => onDelete(payment.id)}
-                    onDuplicate={() => onDuplicate(payment)}
-                  />
-                </motion.div>
-              ))}
-            </AnimatePresence>
-          </div>
-        )}
+      {/* header row */}
+      <div style={{
+        display: "flex", alignItems: "center", justifyContent: "space-between",
+        marginBottom: 14,
+      }}>
+        <span style={{ fontSize: 11, color: "#5a6478", fontFamily: "monospace" }}>
+          {payments.length} {payments.length === 1 ? "pagamento" : "pagamentos"}
+        </span>
+        <button
+          onClick={() => setModalOpen(true)}
+          style={{
+            display: "flex", alignItems: "center", gap: 6,
+            padding: "5px 12px", borderRadius: 7,
+            background: "rgba(79,110,247,.1)", border: "1px solid rgba(79,110,247,.2)",
+            color: "#4f6ef7", fontSize: 11, cursor: "pointer", fontFamily: "inherit",
+          }}
+        >+ Novo pagamento</button>
       </div>
+
+      {payments.length === 0 ? (
+        <div style={{
+          border: "1px dashed rgba(255,255,255,.07)", borderRadius: 9,
+          padding: "32px 16px", textAlign: "center",
+          color: "#3a4255", fontSize: 13,
+        }}>
+          Nenhum pagamento ainda. Adicione o primeiro para começar.
+        </div>
+      ) : (
+        <div style={{ display: "flex", flexDirection: "column" }}>
+          <AnimatePresence mode="popLayout">
+            {payments.map((payment, i) => (
+              <motion.div
+                key={payment.id}
+                initial={{ opacity: 0, x: -8 }}
+                animate={{ opacity: 1, x: 0, transition: { delay: i * 0.04, duration: 0.25 } }}
+                exit={{ opacity: 0, scale: .96 }}
+                layout
+              >
+                <PaymentItem
+                  payment={payment}
+                  isLast={i === payments.length - 1}
+                  onMarkPaid={() => onMarkPaid(payment.id)}
+                  onEdit={() => setEditingPayment(payment)}
+                  onDelete={() => onDelete(payment.id)}
+                  onDuplicate={() => onDuplicate(payment)}
+                />
+              </motion.div>
+            ))}
+          </AnimatePresence>
+        </div>
+      )}
 
       <AnimatePresence>
         {modalOpen && (
@@ -100,59 +107,6 @@ export default function PaymentTimeline({
           />
         )}
       </AnimatePresence>
-
-      <style>{css}</style>
     </>
   )
 }
-
-const css = `
-  .timeline { display: flex; flex-direction: column; }
-
-  .timeline-header {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    margin-bottom: 16px;
-  }
-  .timeline-count {
-    font-size: 12px;
-    color: var(--text-muted);
-    margin: 0;
-    font-weight: 400;
-  }
-
-  .btn-add-payment {
-    display: flex;
-    align-items: center;
-    gap: 6px;
-    background: var(--accent-dim);
-    color: var(--accent);
-    border: 1px solid rgba(108,99,255,0.25);
-    border-radius: var(--radius-sm);
-    padding: 7px 14px;
-    font-family: var(--font-body);
-    font-size: 13px;
-    font-weight: 500;
-    cursor: pointer;
-    transition: background 0.2s, box-shadow 0.2s;
-  }
-  .btn-add-payment:hover {
-    background: rgba(108,99,255,0.22);
-    box-shadow: 0 0 16px var(--accent-glow);
-  }
-
-  .timeline-empty {
-    text-align: center;
-    padding: 40px 0;
-    color: var(--text-muted);
-    font-size: 13px;
-    line-height: 1.8;
-  }
-
-  .timeline-list {
-    display: flex;
-    flex-direction: column;
-    gap: 0;
-  }
-`
