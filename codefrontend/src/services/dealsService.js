@@ -1,8 +1,27 @@
 import { supabase } from "../lib/supabase"
 
-/**
- * FETCH DEALS
- */
+const READONLY = new Set(["id", "userId", "user_id", "createdAt", "created_at"])
+
+function toSnake(dealData) {
+  const MAP = {
+    clientId: "client_id",
+    client_id: "client_id",
+    name:     "name",
+    company:  "company",
+    value:    "value",
+    stage:    "stage",
+    closedAt: "closed_at",
+    closed_at: "closed_at",
+  }
+  const payload = {}
+  for (const [key, value] of Object.entries(dealData || {})) {
+    if (READONLY.has(key)) continue
+    const col = MAP[key]
+    if (col && value !== undefined) payload[col] = value
+  }
+  return payload
+}
+
 export async function fetchDeals(userId) {
   if (!userId) return []
 
@@ -20,20 +39,12 @@ export async function fetchDeals(userId) {
   return (data ?? []).map(dbToDeal)
 }
 
-/**
- * CREATE DEAL
- */
 export async function createDeal(userId, dealData) {
   if (!userId) throw new Error("Missing userId")
 
   const payload = {
     user_id: userId,
-    client_id: dealData?.clientId || null,
-    name: dealData?.name || "",
-    company: dealData?.company || "",
-    value: Number(dealData?.value || 0),
-    stage: dealData?.stage || "lead",
-    closed_at: dealData?.closedAt || null
+    ...toSnake(dealData),
   }
 
   const { data, error } = await supabase
@@ -50,17 +61,15 @@ export async function createDeal(userId, dealData) {
   return dbToDeal(data)
 }
 
-/**
- * UPDATE DEAL
- */
 export async function updateDeal(dealId, dealData) {
   if (!dealId) return null
 
-  const payload = {}
+  const payload = toSnake(dealData)
 
-  Object.entries(dealData || {}).forEach(([key, value]) => {
-    if (value !== undefined) payload[key] = value
-  })
+  if (Object.keys(payload).length === 0) {
+    console.warn("updateDeal: nenhum campo válido", dealData)
+    return null
+  }
 
   const { data, error } = await supabase
     .from("deals")
@@ -77,9 +86,6 @@ export async function updateDeal(dealId, dealData) {
   return dbToDeal(data)
 }
 
-/**
- * DELETE DEAL
- */
 export async function deleteDeal(dealId) {
   if (!dealId) return
 
@@ -94,20 +100,16 @@ export async function deleteDeal(dealId) {
   }
 }
 
-/**
- * NORMALIZER SAFE
- */
 function dbToDeal(row) {
   if (!row) return null
-
   return {
-    id: row.id,
-    clientId: row.client_id,
-    name: row.name || "",
-    company: row.company || "",
-    value: Number(row.value || 0),
-    stage: row.stage || "lead",
-    closedAt: row.closed_at,
-    createdAt: row.created_at
+    id:        row.id,
+    clientId:  row.client_id,
+    name:      row.name     || "",
+    company:   row.company  || "",
+    value:     Number(row.value || 0),
+    stage:     row.stage    || "lead",
+    closedAt:  row.closed_at,
+    createdAt: row.created_at,
   }
 }
