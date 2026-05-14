@@ -2,6 +2,7 @@
 import { useState, useEffect, useCallback, useRef } from "react"
 import {
   fetchProjectFinance,
+  fetchProjectFinanceByClient,
   fetchPaymentsByFinance,
   ensureProjectFinance,
   updateProjectFinance,
@@ -13,22 +14,39 @@ import {
 } from "../services/financeService"
 
 export function useProjectFinance(projectId, clientId, addToast) {
-  const [finance,  setFinance]  = useState(null)
-  const [payments, setPayments] = useState([])
-  const [loading,  setLoading]  = useState(false)
-  const [error,    setError]    = useState(null)
+  const [finance,           setFinance]           = useState(null)
+  const [payments,          setPayments]          = useState([])
+  const [loading,           setLoading]           = useState(false)
+  const [error,             setError]             = useState(null)
+  // projectId resolvido (pode diferir do prop se o prop era clientId)
+  const [resolvedProjectId, setResolvedProjectId] = useState(projectId)
 
-  // Ref anti-duplo-submit para setupFinance
   const settingUpRef = useRef(false)
 
   // ── Load ───────────────────────────────────────────────────
+  // Tenta carregar pelo projectId; se não encontrar (ou projectId === clientId),
+  // faz fallback por clientId.
   const load = useCallback(async () => {
-    if (!projectId) return
+    if (!clientId) return
     setLoading(true)
     setError(null)
     try {
-      const fin = await fetchProjectFinance(projectId)
+      let fin = null
+
+      // Tenta por projectId primeiro (se disponível e diferente do clientId)
+      if (projectId && projectId !== clientId) {
+        fin = await fetchProjectFinance(projectId)
+        if (fin) setResolvedProjectId(projectId)
+      }
+
+      // Fallback: busca pelo clientId
+      if (!fin) {
+        fin = await fetchProjectFinanceByClient(clientId)
+        if (fin) setResolvedProjectId(fin.project_id)
+      }
+
       setFinance(fin)
+
       if (fin) {
         const pays = await fetchPaymentsByFinance(fin.id)
         setPayments(pays)
@@ -41,43 +59,44 @@ export function useProjectFinance(projectId, clientId, addToast) {
     } finally {
       setLoading(false)
     }
-  }, [projectId]) // eslint-disable-line
+  }, [projectId, clientId]) // eslint-disable-line
 
   useEffect(() => { load() }, [load])
 
   // ── Setup Finance ──────────────────────────────────────────
   const setupFinance = useCallback(async (payload) => {
-    // Guard 1: já existe no estado local
     if (finance) {
       addToast?.("Financeiro já configurado para este projeto.", "info")
       return
     }
-    // Guard 2: já está em progresso (duplo-clique)
     if (settingUpRef.current) return
     settingUpRef.current = true
     setLoading(true)
 
     try {
-      const { data, alreadyExisted } = await ensureProjectFinance(
-        clientId,
-        projectId,
-        payload
-      )
+      const { data, alreadyExisted, resolvedProjectId: rpid } =
+        await ensureProjectFinance(clientId, projectId, payload)
 
       setFinance(data)
+      setResolvedProjectId(rpid)
 
-      // Carrega pagamentos existentes em qualquer caso
       const pays = await fetchPaymentsByFinance(data.id)
       setPayments(pays)
 
-      if (alreadyExisted) {
-        addToast?.("Financeiro já configurado para este projeto.", "info")
-      } else {
-        addToast?.("Financeiro configurado!", "success")
-      }
+      addToast?.(
+        alreadyExisted
+          ? "Financeiro já configurado para este projeto."
+          : "Financeiro configurado!",
+        alreadyExisted ? "info" : "success"
+      )
     } catch (err) {
       console.error("[setupFinance] erro:", err)
-      addToast?.("Erro ao configurar financeiro. Tente novamente.", "error")
+      // Mensagem amigável baseada no código
+      const msg =
+        err?.code === "23503"
+          ? "Erro de vínculo: verifique se o projeto está registrado corretamente."
+          : "Erro ao configurar financeiro. Tente novamente."
+      addToast?.(msg, "error")
     } finally {
       settingUpRef.current = false
       setLoading(false)
@@ -186,6 +205,7 @@ export function useProjectFinance(projectId, clientId, addToast) {
     payments,
     loading,
     error,
+    resolvedProjectId,
     reload:           load,
     setupFinance,
     updateFinance,

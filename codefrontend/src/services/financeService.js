@@ -2,6 +2,45 @@
 import { supabase } from "../lib/supabase"
 
 // ─────────────────────────────────────────────────────────────
+// HELPERS
+// ─────────────────────────────────────────────────────────────
+
+/**
+ * Resolve o project_id real da tabela `projects` a partir de um client_id.
+ * Retorna o primeiro projeto vinculado ao cliente, ou null se não existir.
+ */
+export async function fetchProjectIdByClient(clientId) {
+  const { data, error } = await supabase
+    .from("projects")
+    .select("id, name")
+    .eq("client_id", clientId)
+    .order("created_at", { ascending: true })
+    .limit(1)
+    .maybeSingle()
+
+  if (error) throw error
+  return data ?? null   // { id, name } ou null
+}
+
+/**
+ * Cria um projeto na tabela `projects` vinculado ao cliente.
+ * Usado quando o cliente ainda não tem projeto registrado.
+ */
+export async function createProjectForClient(clientId, projectName) {
+  const { data, error } = await supabase
+    .from("projects")
+    .insert({
+      client_id: clientId,
+      name:      projectName || "Projeto Principal",
+    })
+    .select()
+    .single()
+
+  if (error) throw error
+  return data   // { id, name, client_id, ... }
+}
+
+// ─────────────────────────────────────────────────────────────
 // PROJECT FINANCES
 // ─────────────────────────────────────────────────────────────
 
@@ -10,6 +49,23 @@ export async function fetchProjectFinance(projectId) {
     .from("project_finances")
     .select("*")
     .eq("project_id", projectId)
+    .maybeSingle()
+
+  if (error) throw error
+  return data ?? null
+}
+
+/**
+ * Busca o financeiro pelo client_id (via join com projects).
+ * Útil quando não temos o project_id ainda.
+ */
+export async function fetchProjectFinanceByClient(clientId) {
+  const { data, error } = await supabase
+    .from("project_finances")
+    .select("*")
+    .eq("client_id", clientId)
+    .order("created_at", { ascending: true })
+    .limit(1)
     .maybeSingle()
 
   if (error) throw error
@@ -28,58 +84,77 @@ export async function fetchProjectFinance_byId(financeId) {
 }
 
 /**
- * Garante que o financeiro exista — nunca gera 409.
+ * Garante que o financeiro exista para o projeto — nunca gera 409 ou 23503.
  *
- * Fluxo de três etapas:
- *   1. Fetch  → se já existe, retorna imediatamente
- *   2. Upsert → cria OU merge em caso de race-condition (onConflict)
- *   3. Fetch  → último fallback caso o upsert ainda falhe
+ * Fluxo:
+ *   1. Resolve o project_id real (da tabela projects), criando se necessário
+ *   2. Verifica se já existe um project_finances para esse project_id
+ *   3. Upsert atômico com onConflict para evitar 409
  *
- * Retorna { data: ProjectFinance, alreadyExisted: boolean }
+ * Retorna { data: ProjectFinance, alreadyExisted: boolean, resolvedProjectId: string }
  */
 export async function ensureProjectFinance(clientId, projectId, payload) {
-  // ── Etapa 1: verificar existência ──────────────────────────
-  const existing = await fetchProjectFinance(projectId)
-  if (existing) {
-    return { data: existing, alreadyExisted: true }
+  // ── Etapa 1: resolver project_id real ─────────────────────
+  let realProjectId = projectId
+
+  // Se o projectId passado parece ser o clientId (mesmo valor) ou não é
+  // um UUID de projeto válido, busca/cria o projeto real
+  if (!realProjectId || realProjectId === clientId) {
+    const project = await fetchProjectIdByClient(clientId)
+
+    if (project) {
+      realProjectId = project.id
+    } else {
+      // Cria o projeto vinculado ao cliente
+      const newProject = await createProjectForClient(
+        clientId,
+        payload.projectName || payload.name || "Projeto Principal"
+      )
+      realProjectId = newProject.id
+    }
   }
 
-  // ── Etapa 2: upsert atômico ────────────────────────────────
+  // ── Etapa 2: verificar existência do financeiro ────────────
+  const existing = await fetchProjectFinance(realProjectId)
+  if (existing) {
+    return { data: existing, alreadyExisted: true, resolvedProjectId: realProjectId }
+  }
+
+  // ── Etapa 3: upsert atômico ────────────────────────────────
   const { data, error } = await supabase
     .from("project_finances")
     .upsert(
       {
         client_id:    clientId,
-        project_id:   projectId,
+        project_id:   realProjectId,
         total_amount: Number(payload.total_amount) || 0,
         payment_type: payload.payment_type || null,
         notes:        payload.notes?.trim() || null,
       },
       {
-        onConflict:       "project_id", // coluna com UNIQUE constraint
-        ignoreDuplicates: false,        // false = merge (update) ao conflitar
+        onConflict:       "project_id",
+        ignoreDuplicates: false,
       }
     )
     .select()
     .single()
 
   if (!error) {
-    return { data, alreadyExisted: false }
+    return { data, alreadyExisted: false, resolvedProjectId: realProjectId }
   }
 
-  // ── Etapa 3: fallback final ────────────────────────────────
-  // Se mesmo o upsert falhou (RLS, permissão, etc.) tenta buscar o existente
-  // antes de propagar o erro, pois pode ser que exista e o upsert não teve
-  // permissão de INSERT (apenas SELECT).
-  const fallback = await fetchProjectFinance(projectId)
+  // ── Etapa 4: fallback final ────────────────────────────────
+  const fallback = await fetchProjectFinance(realProjectId)
+    ?? await fetchProjectFinanceByClient(clientId)
+
   if (fallback) {
-    return { data: fallback, alreadyExisted: true }
+    return { data: fallback, alreadyExisted: true, resolvedProjectId: realProjectId }
   }
 
   throw error
 }
 
-// Alias para compatibilidade com código existente
+// Alias de compatibilidade
 export async function createProjectFinance(clientId, projectId, payload) {
   const { data } = await ensureProjectFinance(clientId, projectId, payload)
   return data
