@@ -5,7 +5,7 @@ import { useToast }   from "./hooks/useToast"
 import { useDataLoader } from "./hooks/useDataLoader"
 import LoginPage      from "./components/shared/LoginPage"
 import ToastContainer from "./components/shared/Toast"
-import FinancePage    from "./components/pages/FinancePage"
+import ProjectFinancePage from "./components/pages/ProjectFinancePage"
 import KanbanPage     from "./components/pages/KanbanPage"
 import TasksPage      from "./components/pages/TasksPage"
 // ← REMOVIDO: import PaymentsPage
@@ -2067,7 +2067,7 @@ export default function App() {
               {activeTab==="clients"        && <ClientsView   clients={clients} setClients={setClients} addToast={addToast} openClientModal={openClientModal} user={user} dataLoading={dataLoading}/>}
               {activeTab==="kanban"         && <KanbanPage    addToast={addToast}/>}
               {activeTab==="tasks"          && <TasksPage/>}
-              {activeTab==="finance"        && <FinancePage   clients={clients} onOpenProjectFinance={openFinance}/>}
+              {activeTab==="finance"        && <ProjectFinancePage   clients={clients} onOpenProjectFinance={openFinance}/>}
               {/* ← ALTERADO: rota project_finance usa o novo componente */}
               {activeTab==="project_finance" && (
                 <ProjectFinancePage
