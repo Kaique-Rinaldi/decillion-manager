@@ -35,8 +35,6 @@ const BADGE = {
 }
 
 // ─── Normaliza o client vindo do Supabase ────────────────────────────────────
-// O Supabase retorna snake_case (kanban_col), mas o código usa camelCase (kanbanCol).
-// Esta função garante que os dois formatos funcionem.
 function normalizeClient(c) {
   return {
     ...c,
@@ -62,7 +60,6 @@ export default function KanbanPage({ addToast }) {
       const { data: { user } } = await supabase.auth.getUser()
       if (!user) return
       const data = await fetchClients(user.id)
-      // Normaliza snake_case → camelCase logo na entrada
       setClients(data.map(normalizeClient))
     } finally {
       setLoading(false)
@@ -72,7 +69,6 @@ export default function KanbanPage({ addToast }) {
   function onDragStart(e, id) {
     setDraggingId(id)
     e.dataTransfer.effectAllowed = "move"
-    // Firefox exige que setData seja chamado para drag funcionar
     e.dataTransfer.setData("text/plain", id)
   }
 
@@ -97,7 +93,6 @@ export default function KanbanPage({ addToast }) {
     e.preventDefault()
     setOverCol(null)
 
-    // Lê o id tanto do state quanto do dataTransfer (fallback para Firefox)
     const id = draggingId ?? e.dataTransfer.getData("text/plain")
     if (!id) return
 
@@ -114,13 +109,8 @@ export default function KanbanPage({ addToast }) {
     setDraggingId(null)
 
     try {
-      // ✅ FIX PRINCIPAL: envia kanban_col (snake_case) para o Supabase,
-      // pois é assim que a coluna está nomeada no banco.
-      // Se o seu updateClient já faz essa conversão internamente, remova o kanban_col
-      // e deixe apenas kanbanCol — mas ter os dois não quebra nada.
-      // updateClient passa o objeto direto pro Supabase sem converter keys,
-      // então precisa do nome exato da coluna no banco: kanban_col
-      await updateClient(client.id, { kanban_col: targetCol })
+      // ✅ FIX: usa kanbanCol (camelCase) — o updateClient converte internamente para kanban_col
+      await updateClient(client.id, { kanbanCol: targetCol })
       addToast?.(`Movido para "${COLS[targetCol].label}"`, "success")
     } catch (err) {
       console.error("Erro ao mover card:", err)
