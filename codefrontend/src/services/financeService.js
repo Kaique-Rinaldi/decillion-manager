@@ -1,24 +1,38 @@
 // src/services/financeService.js
-import { supabase } from "../lib/supabase"
+import { supabase } from "../lib/supabase";
+
+// ─────────────────────────────────────────────────────────────
+// HELPER — retorna o usuário logado ou lança erro
+// ─────────────────────────────────────────────────────────────
+async function getUser() {
+  const { data: { user }, error } = await supabase.auth.getUser();
+  if (error || !user) throw new Error("Usuário não autenticado");
+  return user;
+}
 
 // ─────────────────────────────────────────────────────────────
 // FINANCIAL RECORDS
 // ─────────────────────────────────────────────────────────────
 
 export async function fetchFinancialRecords() {
+  const user = await getUser();
+
   const { data, error } = await supabase
     .from("financial_records")
     .select(`
       *,
       clients ( id, name, company )
     `)
-    .order("created_at", { ascending: false })
+    .eq("user_id", user.id)
+    .order("created_at", { ascending: false });
 
-  if (error) throw error
-  return data ?? []
+  if (error) throw error;
+  return data ?? [];
 }
 
 export async function fetchFinancialRecord(id) {
+  const user = await getUser();
+
   const { data, error } = await supabase
     .from("financial_records")
     .select(`
@@ -26,18 +40,21 @@ export async function fetchFinancialRecord(id) {
       clients ( id, name, company )
     `)
     .eq("id", id)
-    .single()
+    .eq("user_id", user.id)
+    .single();
 
-  if (error) throw error
-  return data
+  if (error) throw error;
+  return data;
 }
 
 export async function createFinancialRecord(payload) {
-  const totalAmount = Number(payload.total_amount) || 0
+  const user = await getUser();
+  const totalAmount = Number(payload.total_amount) || 0;
 
   const { data, error } = await supabase
     .from("financial_records")
     .insert({
+      user_id:          user.id,
       client_id:        payload.client_id,
       title:            payload.title?.trim(),
       description:      payload.description?.trim() || null,
@@ -50,10 +67,10 @@ export async function createFinancialRecord(payload) {
       notes:            payload.notes?.trim() || null,
     })
     .select(`*, clients ( id, name, company )`)
-    .single()
+    .single();
 
-  if (error) throw error
-  return data
+  if (error) throw error;
+  return data;
 }
 
 // ─────────────────────────────────────────────────────────────
@@ -63,15 +80,18 @@ export async function createFinancialRecord(payload) {
 // missing/zero — no crash, no orphan record.
 // ─────────────────────────────────────────────────────────────
 export async function createFinancialRecordFromClient(client) {
-  const title  = client.projectName?.trim()
-  const amount = Number(client.projectValue) || 0
+  const title  = client.projectName?.trim();
+  const amount = Number(client.projectValue) || 0;
 
   // Guard: only create when meaningful data exists
-  if (!title || amount <= 0) return null
+  if (!title || amount <= 0) return null;
+
+  const user = await getUser();
 
   const { data, error } = await supabase
     .from("financial_records")
     .insert({
+      user_id:          user.id,
       client_id:        client.id,
       title,
       description:      "Registro financeiro criado automaticamente",
@@ -84,140 +104,150 @@ export async function createFinancialRecordFromClient(client) {
       notes:            null,
     })
     .select(`*, clients ( id, name, company )`)
-    .single()
+    .single();
 
-  if (error) throw error
-  return data
+  if (error) throw error;
+  return data;
 }
 
 // ─────────────────────────────────────────────────────────────
 // SYNC CLIENT PAYMENT STATUS
-// Maps financial_record.status → clients.payment_status so the
-// CRM Clients table always reflects the real payment state.
-//
-//  paid    → "pago"
-//  partial → "pendente"  (change to "parcial" if your enum has it)
-//  overdue → "atrasado"
-//  pending → "pendente"
+// Maps financial_record.status → clients.payment_status
 // ─────────────────────────────────────────────────────────────
 export async function syncClientPaymentStatus(clientId, financialStatus) {
-  if (!clientId) return
+  if (!clientId) return;
 
   const STATUS_MAP = {
     paid:    "pago",
     partial: "pendente",
     overdue: "atrasado",
     pending: "pendente",
-  }
+  };
 
   const { error } = await supabase
     .from("clients")
     .update({ payment_status: STATUS_MAP[financialStatus] ?? "pendente" })
-    .eq("id", clientId)
+    .eq("id", clientId);
 
-  if (error) throw error
+  if (error) throw error;
 }
 
 export async function updateFinancialRecord(id, payload) {
-  const patch = {}
-  if (payload.title        !== undefined) patch.title        = payload.title?.trim()
-  if (payload.description  !== undefined) patch.description  = payload.description?.trim() || null
-  if (payload.total_amount !== undefined) patch.total_amount = Number(payload.total_amount)
-  if (payload.start_date   !== undefined) patch.start_date   = payload.start_date || null
-  if (payload.due_date     !== undefined) patch.due_date     = payload.due_date   || null
-  if (payload.notes        !== undefined) patch.notes        = payload.notes?.trim() || null
-  if (payload.status       !== undefined) patch.status       = payload.status
+  const user = await getUser();
+
+  const patch = {};
+  if (payload.title        !== undefined) patch.title        = payload.title?.trim();
+  if (payload.description  !== undefined) patch.description  = payload.description?.trim() || null;
+  if (payload.total_amount !== undefined) patch.total_amount = Number(payload.total_amount);
+  if (payload.start_date   !== undefined) patch.start_date   = payload.start_date || null;
+  if (payload.due_date     !== undefined) patch.due_date     = payload.due_date   || null;
+  if (payload.notes        !== undefined) patch.notes        = payload.notes?.trim() || null;
+  if (payload.status       !== undefined) patch.status       = payload.status;
 
   const { data, error } = await supabase
     .from("financial_records")
     .update(patch)
     .eq("id", id)
+    .eq("user_id", user.id)
     .select(`*, clients ( id, name, company )`)
-    .single()
+    .single();
 
-  if (error) throw error
-  return data
+  if (error) throw error;
+  return data;
 }
 
 export async function deleteFinancialRecord(id) {
-  const { error } = await supabase.from("financial_records").delete().eq("id", id)
-  if (error) throw error
+  const user = await getUser();
+
+  const { error } = await supabase
+    .from("financial_records")
+    .delete()
+    .eq("id", id)
+    .eq("user_id", user.id);
+
+  if (error) throw error;
 }
 
 // ─────────────────────────────────────────────────────────────
 // RECALCULATE + SYNC
-// Recomputes received/remaining/status from all payments,
-// updates financial_records, then syncs clients.payment_status.
 // ─────────────────────────────────────────────────────────────
 export async function recalculateRecord(recordId) {
+  const user = await getUser();
+
   const { data: payments, error: pe } = await supabase
     .from("payments")
     .select("amount, status, due_date")
     .eq("financial_record_id", recordId)
+    .eq("user_id", user.id);
 
-  if (pe) throw pe
+  if (pe) throw pe;
 
   const { data: record, error: re } = await supabase
     .from("financial_records")
     .select("total_amount, client_id")
     .eq("id", recordId)
-    .single()
+    .eq("user_id", user.id)
+    .single();
 
-  if (re) throw re
+  if (re) throw re;
 
   const received  = payments
     .filter(p => p.status === "paid")
-    .reduce((acc, p) => acc + Number(p.amount), 0)
+    .reduce((acc, p) => acc + Number(p.amount), 0);
 
-  const total     = Number(record.total_amount)
-  const remaining = Math.max(total - received, 0)
+  const total     = Number(record.total_amount);
+  const remaining = Math.max(total - received, 0);
 
-  let status = "pending"
+  let status = "pending";
   if (received >= total && total > 0) {
-    status = "paid"
+    status = "paid";
   } else if (received > 0) {
-    status = "partial"
+    status = "partial";
   } else {
-    const today   = new Date().toISOString().slice(0, 10)
+    const today   = new Date().toISOString().slice(0, 10);
     const overdue = payments.some(
       p => p.status === "pending" && p.due_date && p.due_date < today
-    )
-    if (overdue) status = "overdue"
+    );
+    if (overdue) status = "overdue";
   }
 
   const { data, error } = await supabase
     .from("financial_records")
     .update({ received_amount: received, remaining_amount: remaining, status })
     .eq("id", recordId)
+    .eq("user_id", user.id)
     .select(`*, clients ( id, name, company )`)
-    .single()
+    .single();
 
-  if (error) throw error
+  if (error) throw error;
 
-  // Sync payment status back to clients (non-blocking — won't crash payments flow)
-  syncClientPaymentStatus(record.client_id, status).catch(() => {})
+  // Sync payment status back to clients (non-blocking)
+  syncClientPaymentStatus(record.client_id, status).catch(() => {});
 
-  return data
+  return data;
 }
 
 // ─────────────────────────────────────────────────────────────
 // ANALYTICS
 // ─────────────────────────────────────────────────────────────
 export async function fetchFinanceStats() {
+  const user = await getUser();
+
   const { data, error } = await supabase
     .from("financial_records")
     .select("total_amount, received_amount, remaining_amount, status, due_date")
+    .eq("user_id", user.id);
 
-  if (error) throw error
+  if (error) throw error;
 
-  const totalRevenue  = data.reduce((s, r) => s + Number(r.total_amount),    0)
-  const totalReceived = data.reduce((s, r) => s + Number(r.received_amount), 0)
+  const totalRevenue  = data.reduce((s, r) => s + Number(r.total_amount),    0);
+  const totalReceived = data.reduce((s, r) => s + Number(r.received_amount), 0);
   const totalPending  = data
     .filter(r => r.status === "pending" || r.status === "partial")
-    .reduce((s, r) => s + Number(r.remaining_amount), 0)
+    .reduce((s, r) => s + Number(r.remaining_amount), 0);
   const totalOverdue  = data
     .filter(r => r.status === "overdue")
-    .reduce((s, r) => s + Number(r.remaining_amount), 0)
+    .reduce((s, r) => s + Number(r.remaining_amount), 0);
 
   return {
     totalRevenue,
@@ -228,5 +258,5 @@ export async function fetchFinanceStats() {
     countOverdue: data.filter(r => r.status === "overdue").length,
     countPaid:    data.filter(r => r.status === "paid").length,
     countPending: data.filter(r => r.status === "pending" || r.status === "partial").length,
-  }
+  };
 }
