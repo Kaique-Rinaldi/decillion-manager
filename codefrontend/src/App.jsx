@@ -8,6 +8,7 @@ import ToastContainer from "./components/shared/Toast"
 import FinancePage    from "./components/pages/FinancePage"
 import KanbanPage     from "./components/pages/KanbanPage"
 import TasksPage      from "./components/pages/TasksPage"
+import PaymentsPage   from "./components/pages/PaymentsPage"
 
 import {
   fetchClients, createClient, updateClient, deleteClient,
@@ -145,24 +146,27 @@ const NAV_SECTIONS = [
     { id:"tasks",     label:"Tarefas",       icon:"M9 11l3 3L22 4M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11", badgeKey:"pendingTasks" },
   ]},
   { label:"Financeiro", items:[
-    { id:"finance",  label:"Financeiro", icon:"M12 2a10 10 0 1 0 0 20A10 10 0 0 0 12 2zM12 6v6l4 2" },
-    { id:"reports",  label:"Relatórios", icon:"M18 20V10M12 20V4M6 20v-6" },
+    { id:"finance",   label:"Financeiro",  icon:"M12 2a10 10 0 1 0 0 20A10 10 0 0 0 12 2zM12 6v6l4 2" },
+    { id:"payments",  label:"Pagamentos",  icon:"M3 10h18M7 15h1m4 0h1m-7 4h12a3 3 0 0 0 3-3V8a3 3 0 0 0-3-3H6a3 3 0 0 0-3 3v8a3 3 0 0 0 3 3z" },
+    { id:"reports",   label:"Relatórios",  icon:"M18 20V10M12 20V4M6 20v-6" },
   ]},
   { label:"Sistema", items:[
     { id:"notifications", label:"Notificações",  icon:"M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9M13.73 21a2 2 0 0 1-3.46 0" },
     { id:"settings",      label:"Configurações", icon:"M12 15a3 3 0 1 0 0-6 3 3 0 0 0 0 6zM19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z" },
   ]},
 ]
+
 const PAGE_META = {
-  dashboard:     { title:"Dashboard",      sub:"Visão geral do sistema"     },
-  pipeline:      { title:"Pipeline CRM",   sub:"Kanban de oportunidades"    },
-  clients:       { title:"Clientes",       sub:"Base de contatos e contas"  },
-  kanban:        { title:"Kanban",         sub:"Quadro de projetos"         },
-  tasks:         { title:"Tarefas",        sub:"Gerenciamento de atividades" },
-  finance:       { title:"Financeiro",     sub:"Receitas e pagamentos"      },
-  reports:       { title:"Relatórios",     sub:"Análises e métricas"        },
-  notifications: { title:"Notificações",   sub:"Central de alertas"         },
-  settings:      { title:"Configurações",  sub:"Preferências do sistema"    },
+  dashboard:     { title:"Dashboard",      sub:"Visão geral do sistema"       },
+  pipeline:      { title:"Pipeline CRM",   sub:"Kanban de oportunidades"      },
+  clients:       { title:"Clientes",       sub:"Base de contatos e contas"    },
+  kanban:        { title:"Kanban",         sub:"Quadro de projetos"           },
+  tasks:         { title:"Tarefas",        sub:"Gerenciamento de atividades"  },
+  finance:       { title:"Financeiro",     sub:"Receitas e pagamentos"        },
+  payments:      { title:"Pagamentos",     sub:"Gestão de pagamentos por cliente" },
+  reports:       { title:"Relatórios",     sub:"Análises e métricas"          },
+  notifications: { title:"Notificações",   sub:"Central de alertas"           },
+  settings:      { title:"Configurações",  sub:"Preferências do sistema"      },
 }
 
 // ═══════════════════════════════════════════════════════════════════
@@ -353,6 +357,7 @@ function CommandPalette({ open, onClose, clients, setActiveTab, openClientModal 
     { label:"Ir para Kanban",        icon:"▣", action: () => { setActiveTab("kanban");    onClose() } },
     { label:"Ir para Tarefas",       icon:"✓", action: () => { setActiveTab("tasks");     onClose() } },
     { label:"Ir para Financeiro",    icon:"$", action: () => { setActiveTab("finance");   onClose() } },
+    { label:"Ir para Pagamentos",    icon:"💳", action: () => { setActiveTab("payments");  onClose() } },
     { label:"Ir para Relatórios",    icon:"↗", action: () => { setActiveTab("reports");   onClose() } },
     { label:"Ir para Configurações", icon:"⚙", action: () => { setActiveTab("settings");  onClose() } },
   ]
@@ -769,7 +774,7 @@ function DashboardView({ clients, deals }) {
 }
 
 // ═══════════════════════════════════════════════════════════════════
-// PIPELINE VIEW — completa, com criar deal e drag & drop livre
+// PIPELINE VIEW
 // ═══════════════════════════════════════════════════════════════════
 function PipelineView({ deals, setDeals, addToast, user }) {
   const [draggingId,   setDraggingId]   = useState(null)
@@ -787,7 +792,6 @@ function PipelineView({ deals, setDeals, addToast, user }) {
     ? openDeals.reduce((s,d) => s + d.value, 0) / openDeals.length
     : 0
 
-  // ── Drag & drop ────────────────────────────────────────────────
   function onDragStart(id) { setDraggingId(id) }
   function onDragOver(e, stageKey) { e.preventDefault(); setOverStage(stageKey) }
 
@@ -796,41 +800,25 @@ function PipelineView({ deals, setDeals, addToast, user }) {
     if (!draggingId) return
     const deal = deals.find(d => d.id === draggingId)
     if (!deal || deal.stage === targetStage) { setDraggingId(null); return }
-
-    const closedAt = targetStage === "fechado"
-      ? new Date().toISOString().split("T")[0]
-      : null
-
-    // Optimistic update
-    setDeals(prev => prev.map(d =>
-      d.id === draggingId ? { ...d, stage: targetStage, closedAt } : d
-    ))
-
+    const closedAt = targetStage === "fechado" ? new Date().toISOString().split("T")[0] : null
+    setDeals(prev => prev.map(d => d.id === draggingId ? { ...d, stage: targetStage, closedAt } : d))
     try {
       await updateDeal(draggingId, { stage: targetStage, closedAt })
       addToast(`Negociação movida para "${PIPELINE_STAGE[targetStage].label}"`, "success")
     } catch {
-      // Rollback
-      setDeals(prev => prev.map(d =>
-        d.id === draggingId ? { ...d, stage: deal.stage, closedAt: deal.closedAt } : d
-      ))
+      setDeals(prev => prev.map(d => d.id === draggingId ? { ...d, stage: deal.stage, closedAt: deal.closedAt } : d))
       addToast("Erro ao mover negociação.", "error")
     }
     setDraggingId(null)
   }
 
-  // ── Form helpers ───────────────────────────────────────────────
   function openCreate() {
     setForm({ stage:"lead", value:"", name:"", company:"" })
-    setFormErrors({})
-    setEditingDeal(null)
-    setShowForm(true)
+    setFormErrors({}); setEditingDeal(null); setShowForm(true)
   }
   function openEdit(deal) {
     setForm({ name: deal.name, company: deal.company, value: deal.value, stage: deal.stage })
-    setFormErrors({})
-    setEditingDeal(deal)
-    setShowForm(true)
+    setFormErrors({}); setEditingDeal(deal); setShowForm(true)
   }
   function closeForm() { setShowForm(false); setEditingDeal(null) }
 
@@ -897,7 +885,6 @@ function PipelineView({ deals, setDeals, addToast, user }) {
 
   return (
     <div>
-      {/* Header row */}
       <div style={{ display:"flex", justifyContent:"flex-end", marginBottom:16 }}>
         <button onClick={openCreate}
           style={{ display:"flex", alignItems:"center", gap:6, padding:"7px 16px", borderRadius:8,
@@ -907,7 +894,6 @@ function PipelineView({ deals, setDeals, addToast, user }) {
         </button>
       </div>
 
-      {/* Kanban board */}
       <div style={{ display:"grid", gridTemplateColumns:"repeat(5,1fr)", gap:8, marginBottom:20 }}>
         {PIPELINE_STAGE_KEYS.map(stageKey => {
           const stage      = PIPELINE_STAGE[stageKey]
@@ -943,24 +929,15 @@ function PipelineView({ deals, setDeals, addToast, user }) {
                     style={{ background:"#161b2a", border:"1px solid rgba(255,255,255,.06)",
                       borderRadius:8, padding:8, marginBottom:6, cursor:"grab",
                       opacity: draggingId === d.id ? .45 : 1, position:"relative" }}>
-                    {/* Actions */}
                     <div style={{ position:"absolute", top:6, right:6, display:"flex", gap:4 }}>
-                      <button
-                        onClick={e => { e.stopPropagation(); openEdit(d) }}
-                        title="Editar"
+                      <button onClick={e => { e.stopPropagation(); openEdit(d) }} title="Editar"
                         style={{ width:20, height:20, borderRadius:4, background:"rgba(79,110,247,.12)",
                           border:"1px solid rgba(79,110,247,.2)", color:"#4f6ef7", cursor:"pointer",
-                          display:"flex", alignItems:"center", justifyContent:"center", fontSize:10 }}>
-                        ✎
-                      </button>
-                      <button
-                        onClick={e => { e.stopPropagation(); setConfirmId(d.id) }}
-                        title="Deletar"
+                          display:"flex", alignItems:"center", justifyContent:"center", fontSize:10 }}>✎</button>
+                      <button onClick={e => { e.stopPropagation(); setConfirmId(d.id) }} title="Deletar"
                         style={{ width:20, height:20, borderRadius:4, background:"rgba(239,68,68,.1)",
                           border:"1px solid rgba(239,68,68,.2)", color:"#ef4444", cursor:"pointer",
-                          display:"flex", alignItems:"center", justifyContent:"center", fontSize:10 }}>
-                        ×
-                      </button>
+                          display:"flex", alignItems:"center", justifyContent:"center", fontSize:10 }}>×</button>
                     </div>
                     <div style={{ fontSize:11, fontWeight:500, color:"#e8eaf0", marginBottom:3, paddingRight:44,
                       overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>{d.name}</div>
@@ -977,16 +954,13 @@ function PipelineView({ deals, setDeals, addToast, user }) {
               {stageDeals.length === 0 && (
                 <div style={{ border:"1px dashed rgba(255,255,255,.07)", borderRadius:7,
                   height:48, display:"flex", alignItems:"center", justifyContent:"center",
-                  fontSize:10, color:"#3a4255" }}>
-                  Solte aqui
-                </div>
+                  fontSize:10, color:"#3a4255" }}>Solte aqui</div>
               )}
             </div>
           )
         })}
       </div>
 
-      {/* Stats */}
       <div style={{ display:"grid", gridTemplateColumns:"repeat(3,1fr)", gap:12 }}>
         <StatCard label="Valor total pipeline" value={formatCurrency(totalValue)}
           iconPath="M12 2a10 10 0 1 0 0 20A10 10 0 0 0 12 2zM12 6v6l4 2" iconColor="green"/>
@@ -996,7 +970,6 @@ function PipelineView({ deals, setDeals, addToast, user }) {
           iconPath="M4 6h16M4 12h16M4 18h16" iconColor="amber"/>
       </div>
 
-      {/* Create / Edit form modal */}
       <AnimatePresence>
         {showForm && (
           <div style={{ position:"fixed", inset:0, background:"rgba(0,0,0,.6)", zIndex:1000,
@@ -1018,7 +991,6 @@ function PipelineView({ deals, setDeals, addToast, user }) {
               </div>
               <form onSubmit={handleSave} noValidate style={{ padding:"20px 24px 24px" }}>
                 <div style={{ display:"grid", gap:12 }}>
-                  {/* Nome */}
                   <div>
                     <div style={{ fontSize:9, color:"#5a6478", fontFamily:"monospace", textTransform:"uppercase",
                       letterSpacing:".5px", marginBottom:5 }}>Nome da negociação *</div>
@@ -1027,14 +999,12 @@ function PipelineView({ deals, setDeals, addToast, user }) {
                       style={{ ...inputStyle, borderColor: formErrors.name ? "#ef4444" : "rgba(255,255,255,.15)" }}/>
                     {formErrors.name && <div style={{ fontSize:10, color:"#ef4444", marginTop:3 }}>{formErrors.name}</div>}
                   </div>
-                  {/* Empresa */}
                   <div>
                     <div style={{ fontSize:9, color:"#5a6478", fontFamily:"monospace", textTransform:"uppercase",
                       letterSpacing:".5px", marginBottom:5 }}>Empresa</div>
                     <input type="text" value={form.company||""} onChange={e => setF("company", e.target.value)}
                       placeholder="Ex: Acme Corp" style={inputStyle}/>
                   </div>
-                  {/* Valor + Etapa lado a lado */}
                   <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:12 }}>
                     <div>
                       <div style={{ fontSize:9, color:"#5a6478", fontFamily:"monospace", textTransform:"uppercase",
@@ -1079,7 +1049,6 @@ function PipelineView({ deals, setDeals, addToast, user }) {
         )}
       </AnimatePresence>
 
-      {/* Delete confirm */}
       <AnimatePresence>
         {confirmId && (
           <div style={{ position:"fixed", inset:0, background:"rgba(0,0,0,.6)", zIndex:1100,
@@ -1439,18 +1408,17 @@ function ClientsView({ clients, setClients, addToast, openClientModal, user, dat
                   Dados do projeto
                 </div>
                 <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:12, marginBottom:12 }}>
-                  <div>
-                    <div style={{ fontSize:9, color:"#5a6478", fontFamily:"monospace", textTransform:"uppercase", letterSpacing:".5px", marginBottom:5 }}>Nome do projeto *</div>
-                    <input type="text" value={form.projectName||""} onChange={e => setF("projectName", e.target.value)}
-                      placeholder="Ex: Redesign Site" style={{ ...inputStyle, borderColor: formErrors.projectName ? "#ef4444" : "rgba(255,255,255,.15)" }}/>
-                    {formErrors.projectName && <div style={{ fontSize:10, color:"#ef4444", marginTop:3 }}>{formErrors.projectName}</div>}
-                  </div>
-                  <div>
-                    <div style={{ fontSize:9, color:"#5a6478", fontFamily:"monospace", textTransform:"uppercase", letterSpacing:".5px", marginBottom:5 }}>Responsável *</div>
-                    <input type="text" value={form.projectOwner||""} onChange={e => setF("projectOwner", e.target.value)}
-                      placeholder="Ex: Mariana A." style={{ ...inputStyle, borderColor: formErrors.projectOwner ? "#ef4444" : "rgba(255,255,255,.15)" }}/>
-                    {formErrors.projectOwner && <div style={{ fontSize:10, color:"#ef4444", marginTop:3 }}>{formErrors.projectOwner}</div>}
-                  </div>
+                  {[
+                    { k:"projectName",  l:"Nome do projeto *", t:"text", ph:"Ex: Redesign Site" },
+                    { k:"projectOwner", l:"Responsável *",     t:"text", ph:"Ex: Mariana A."    },
+                  ].map(({ k,l,t,ph }) => (
+                    <div key={k}>
+                      <div style={{ fontSize:9, color:"#5a6478", fontFamily:"monospace", textTransform:"uppercase", letterSpacing:".5px", marginBottom:5 }}>{l}</div>
+                      <input type={t} value={form[k]||""} onChange={e => setF(k, e.target.value)}
+                        placeholder={ph} style={{ ...inputStyle, borderColor: formErrors[k] ? "#ef4444" : "rgba(255,255,255,.15)" }}/>
+                      {formErrors[k] && <div style={{ fontSize:10, color:"#ef4444", marginTop:3 }}>{formErrors[k]}</div>}
+                    </div>
+                  ))}
                   <div>
                     <div style={{ fontSize:9, color:"#5a6478", fontFamily:"monospace", textTransform:"uppercase", letterSpacing:".5px", marginBottom:5 }}>Valor (R$) *</div>
                     <input type="number" min="0" step="0.01" value={form.projectValue||""}
@@ -2083,6 +2051,7 @@ export default function App() {
               {activeTab==="kanban"        && <KanbanPage     addToast={addToast}/>}
               {activeTab==="tasks"         && <TasksPage/>}
               {activeTab==="finance"       && <FinancePage    clients={clients}/>}
+              {activeTab==="payments"      && <PaymentsPage   clients={clients} addToast={addToast}/>}
               {activeTab==="reports"       && <ReportsView    clients={clients} deals={deals}/>}
               {activeTab==="notifications" && <NotificationsView/>}
               {activeTab==="settings"      && <SettingsView   user={user} onLogout={logout}/>}
