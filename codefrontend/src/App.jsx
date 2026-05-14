@@ -10,7 +10,6 @@ import KanbanPage     from "./components/pages/KanbanPage"
 import TasksPage      from "./components/pages/TasksPage"
 // ← REMOVIDO: import PaymentsPage
 // ← ADICIONADO:
-import ProjectFinancePage from "./components/pages/ProjectFinancePage"
 
 import {
   fetchClients, createClient, updateClient, deleteClient,
