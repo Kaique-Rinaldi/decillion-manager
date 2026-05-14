@@ -8,7 +8,9 @@ import ToastContainer from "./components/shared/Toast"
 import FinancePage    from "./components/pages/FinancePage"
 import KanbanPage     from "./components/pages/KanbanPage"
 import TasksPage      from "./components/pages/TasksPage"
-import PaymentsPage   from "./components/pages/PaymentsPage"
+// ← REMOVIDO: import PaymentsPage
+// ← ADICIONADO:
+import ProjectFinancePage from "./components/pages/ProjectFinancePage"
 
 import {
   fetchClients, createClient, updateClient, deleteClient,
@@ -147,7 +149,7 @@ const NAV_SECTIONS = [
   ]},
   { label:"Financeiro", items:[
     { id:"finance",   label:"Financeiro",  icon:"M12 2a10 10 0 1 0 0 20A10 10 0 0 0 12 2zM12 6v6l4 2" },
-    { id:"payments",  label:"Pagamentos",  icon:"M3 10h18M7 15h1m4 0h1m-7 4h12a3 3 0 0 0 3-3V8a3 3 0 0 0-3-3H6a3 3 0 0 0-3 3v8a3 3 0 0 0 3 3z" },
+    // ← REMOVIDO: payments do nav — agora está dentro de cada projeto
     { id:"reports",   label:"Relatórios",  icon:"M18 20V10M12 20V4M6 20v-6" },
   ]},
   { label:"Sistema", items:[
@@ -157,20 +159,21 @@ const NAV_SECTIONS = [
 ]
 
 const PAGE_META = {
-  dashboard:     { title:"Dashboard",      sub:"Visão geral do sistema"       },
-  pipeline:      { title:"Pipeline CRM",   sub:"Kanban de oportunidades"      },
-  clients:       { title:"Clientes",       sub:"Base de contatos e contas"    },
-  kanban:        { title:"Kanban",         sub:"Quadro de projetos"           },
-  tasks:         { title:"Tarefas",        sub:"Gerenciamento de atividades"  },
-  finance:       { title:"Financeiro",     sub:"Receitas e pagamentos"        },
-  payments:      { title:"Pagamentos",     sub:"Gestão de pagamentos por cliente" },
-  reports:       { title:"Relatórios",     sub:"Análises e métricas"          },
-  notifications: { title:"Notificações",   sub:"Central de alertas"           },
-  settings:      { title:"Configurações",  sub:"Preferências do sistema"      },
+  dashboard:     { title:"Dashboard",      sub:"Visão geral do sistema"              },
+  pipeline:      { title:"Pipeline CRM",   sub:"Kanban de oportunidades"             },
+  clients:       { title:"Clientes",       sub:"Base de contatos e contas"           },
+  kanban:        { title:"Kanban",         sub:"Quadro de projetos"                  },
+  tasks:         { title:"Tarefas",        sub:"Gerenciamento de atividades"         },
+  finance:       { title:"Financeiro",     sub:"Visão global de receitas"            },
+  // ← ALTERADO: payments agora é "Financeiro do Projeto"
+  project_finance: { title:"Financeiro do Projeto", sub:"Gestão financeira por projeto" },
+  reports:       { title:"Relatórios",     sub:"Análises e métricas"                 },
+  notifications: { title:"Notificações",   sub:"Central de alertas"                  },
+  settings:      { title:"Configurações",  sub:"Preferências do sistema"             },
 }
 
 // ═══════════════════════════════════════════════════════════════════
-// 4. UI PRIMITIVES
+// 4. UI PRIMITIVES (inalterado)
 // ═══════════════════════════════════════════════════════════════════
 const BADGE_COLOR = {
   green:  { bg:"rgba(34,201,125,.12)",  color:"#22c97d" },
@@ -357,7 +360,6 @@ function CommandPalette({ open, onClose, clients, setActiveTab, openClientModal 
     { label:"Ir para Kanban",        icon:"▣", action: () => { setActiveTab("kanban");    onClose() } },
     { label:"Ir para Tarefas",       icon:"✓", action: () => { setActiveTab("tasks");     onClose() } },
     { label:"Ir para Financeiro",    icon:"$", action: () => { setActiveTab("finance");   onClose() } },
-    { label:"Ir para Pagamentos",    icon:"💳", action: () => { setActiveTab("payments");  onClose() } },
     { label:"Ir para Relatórios",    icon:"↗", action: () => { setActiveTab("reports");   onClose() } },
     { label:"Ir para Configurações", icon:"⚙", action: () => { setActiveTab("settings");  onClose() } },
   ]
@@ -450,7 +452,7 @@ function CommandPalette({ open, onClose, clients, setActiveTab, openClientModal 
 // ═══════════════════════════════════════════════════════════════════
 // 6. CLIENT DETAIL MODAL
 // ═══════════════════════════════════════════════════════════════════
-function ClientDetailModal({ client, onClose, onEdit, onAddActivity }) {
+function ClientDetailModal({ client, onClose, onEdit, onAddActivity, onOpenFinance }) {
   const [tab, setTab] = useState("overview")
   const [newNote, setNewNote] = useState(client.notes || "")
   const [editingNote, setEditingNote] = useState(false)
@@ -586,33 +588,23 @@ function ClientDetailModal({ client, onClose, onEdit, onAddActivity }) {
           )}
 
           {tab === "pagamentos" && (
-            <div>
-              <div style={{ background:"#161b2a", borderRadius:9, padding:"16px", border:"1px solid rgba(255,255,255,.06)",
-                display:"flex", alignItems:"center", justifyContent:"space-between", marginBottom:16 }}>
-                <div>
-                  <div style={{ fontSize:9, color:"#5a6478", fontFamily:"monospace", textTransform:"uppercase",
-                    letterSpacing:".6px", marginBottom:6 }}>Valor total</div>
-                  <div style={{ fontSize:24, fontWeight:600, color:"#22c97d", fontFamily:"monospace" }}>
-                    {formatCurrency(client.projectValue)}
-                  </div>
-                </div>
-                <Badge colorKey={ps.badge} label={ps.label}/>
+            // ← ALTERADO: agora mostra botão para abrir financeiro do projeto
+            <div style={{ textAlign:"center", padding:"32px 0" }}>
+              <div style={{ fontSize:32, marginBottom:12 }}>💰</div>
+              <div style={{ fontSize:13, color:"#e8eaf0", fontWeight:500, marginBottom:6 }}>
+                Financeiro por Projeto
               </div>
-              <div style={{ background:"#161b2a", borderRadius:9, padding:"14px",
-                border:"1px solid rgba(255,255,255,.06)" }}>
-                {[
-                  { l:"Status", v:ps.label },
-                  { l:"Início do projeto", v:formatDate(client.startDate) },
-                  { l:"Entrega", v:formatDate(client.endDate) },
-                  { l:"Empresa", v:client.company || "—" },
-                ].map((r, i, a) => (
-                  <div key={r.l} style={{ display:"flex", justifyContent:"space-between",
-                    padding:"8px 0", borderBottom: i < a.length-1 ? "1px solid rgba(255,255,255,.04)" : "none" }}>
-                    <span style={{ fontSize:11, color:"#5a6478" }}>{r.l}</span>
-                    <span style={{ fontSize:11, color:"#e8eaf0", fontFamily:"monospace" }}>{r.v}</span>
-                  </div>
-                ))}
+              <div style={{ fontSize:11, color:"#5a6478", marginBottom:20, lineHeight:1.6 }}>
+                Os pagamentos agora estão vinculados a projetos.<br/>
+                Selecione um projeto para gerenciar o financeiro.
               </div>
+              <button
+                onClick={() => { onClose(); onOpenFinance(client) }}
+                style={{ padding:"9px 20px", borderRadius:8, background:"#4f6ef7",
+                  border:"none", color:"#fff", fontSize:12, fontWeight:500,
+                  cursor:"pointer", fontFamily:"inherit" }}>
+                Abrir Financeiro do Projeto
+              </button>
             </div>
           )}
 
@@ -648,7 +640,8 @@ function ClientDetailModal({ client, onClose, onEdit, onAddActivity }) {
 }
 
 // ═══════════════════════════════════════════════════════════════════
-// 7. VIEWS
+// 7. VIEWS (inalteradas — DashboardView, PipelineView, ClientsView,
+//           ReportsView, NotificationsView, SettingsView)
 // ═══════════════════════════════════════════════════════════════════
 
 function DashboardView({ clients, deals }) {
@@ -773,9 +766,6 @@ function DashboardView({ clients, deals }) {
   )
 }
 
-// ═══════════════════════════════════════════════════════════════════
-// PIPELINE VIEW
-// ═══════════════════════════════════════════════════════════════════
 function PipelineView({ deals, setDeals, addToast, user }) {
   const [draggingId,   setDraggingId]   = useState(null)
   const [overStage,    setOverStage]    = useState(null)
@@ -1804,7 +1794,18 @@ export default function App() {
   const [deals,   setDeals]   = useState([])
   const [tasks,   setTasks]   = useState([])
 
+  // ← ADICIONADO: estado para projeto selecionado no financeiro
+  const [financeClient,  setFinanceClient]  = useState(null)
+  const [financeProject, setFinanceProject] = useState(null)
+
   useDataLoader(user, setClients, setDeals, setTasks)
+
+  // ← ADICIONADO: abre financeiro de um cliente/projeto específico
+  function openFinance(client, project = null) {
+    setFinanceClient(client)
+    setFinanceProject(project)
+    setActiveTab("project_finance")
+  }
 
   useEffect(() => {
     function handleKey(e) {
@@ -1909,6 +1910,7 @@ export default function App() {
             onClose={() => setDetailClient(null)}
             onEdit={openEditFromModal}
             onAddActivity={addActivity}
+            onOpenFinance={(client) => { setDetailClient(null); openFinance(client) }}
           />
         )}
       </AnimatePresence>
@@ -2013,7 +2015,22 @@ export default function App() {
         <div style={{ padding:"14px 24px", borderBottom:"1px solid rgba(255,255,255,.06)",
           display:"flex", alignItems:"center", gap:12, background:"#111520", flexShrink:0 }}>
           <div>
-            <div style={{ fontSize:14, fontWeight:600, color:"#e8eaf0" }}>{meta.title}</div>
+            <div style={{ fontSize:14, fontWeight:600, color:"#e8eaf0" }}>
+              {/* ← ADICIONADO: breadcrumb no financeiro do projeto */}
+              {activeTab === "project_finance" && financeClient
+                ? <span>
+                    <span
+                      onClick={() => setActiveTab("finance")}
+                      style={{ color:"#5a6478", cursor:"pointer", fontWeight:400 }}
+                    >
+                      Financeiro
+                    </span>
+                    <span style={{ color:"#3a4255", margin:"0 6px" }}>›</span>
+                    {financeClient.name}
+                  </span>
+                : meta.title
+              }
+            </div>
             <div style={{ fontSize:11, color:"#5a6478", marginTop:1 }}>{meta.sub}</div>
           </div>
           {dataLoading && (
@@ -2045,16 +2062,26 @@ export default function App() {
         <div style={{ flex:1, overflowY:"auto", padding:24 }}>
           <AnimatePresence mode="wait">
             <motion.div key={activeTab} variants={pageVariants} initial="initial" animate="animate" exit="exit">
-              {activeTab==="dashboard"     && <DashboardView  clients={clients} deals={deals}/>}
-              {activeTab==="pipeline"      && <PipelineView   deals={deals} setDeals={setDeals} addToast={addToast} user={user}/>}
-              {activeTab==="clients"       && <ClientsView    clients={clients} setClients={setClients} addToast={addToast} openClientModal={openClientModal} user={user} dataLoading={dataLoading}/>}
-              {activeTab==="kanban"        && <KanbanPage     addToast={addToast}/>}
-              {activeTab==="tasks"         && <TasksPage/>}
-              {activeTab==="finance"       && <FinancePage    clients={clients}/>}
-              {activeTab==="payments"      && <PaymentsPage   clients={clients} addToast={addToast}/>}
-              {activeTab==="reports"       && <ReportsView    clients={clients} deals={deals}/>}
-              {activeTab==="notifications" && <NotificationsView/>}
-              {activeTab==="settings"      && <SettingsView   user={user} onLogout={logout}/>}
+              {activeTab==="dashboard"      && <DashboardView clients={clients} deals={deals}/>}
+              {activeTab==="pipeline"       && <PipelineView  deals={deals} setDeals={setDeals} addToast={addToast} user={user}/>}
+              {activeTab==="clients"        && <ClientsView   clients={clients} setClients={setClients} addToast={addToast} openClientModal={openClientModal} user={user} dataLoading={dataLoading}/>}
+              {activeTab==="kanban"         && <KanbanPage    addToast={addToast}/>}
+              {activeTab==="tasks"          && <TasksPage/>}
+              {activeTab==="finance"        && <FinancePage   clients={clients} onOpenProjectFinance={openFinance}/>}
+              {/* ← ALTERADO: rota project_finance usa o novo componente */}
+              {activeTab==="project_finance" && (
+                <ProjectFinancePage
+                  client={financeClient}
+                  project={financeProject ?? {
+                    id:   financeClient?.id,
+                    name: financeClient?.projectName || financeClient?.name,
+                  }}
+                  addToast={addToast}
+                />
+              )}
+              {activeTab==="reports"        && <ReportsView   clients={clients} deals={deals}/>}
+              {activeTab==="notifications"  && <NotificationsView/>}
+              {activeTab==="settings"       && <SettingsView  user={user} onLogout={logout}/>}
             </motion.div>
           </AnimatePresence>
         </div>
