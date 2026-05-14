@@ -924,12 +924,197 @@ function ClientsView({ clients, setClients, addToast, openClientModal, user, dat
   const [page,          setPage]          = useState(1)
   const [perPage,       setPerPage]       = useState(10)
   const [showAdvanced,  setShowAdvanced]  = useState(false)
+
   const query = useDebounce(rawQuery, 250)
+
   useEffect(() => {
-    function handle(e) { openEdit(e.detail) }
+    function handle(e) {
+      openEdit(e.detail)
+    }
+
     window.addEventListener("crm:editClient", handle)
-    return () => window.removeEventListener("crm:editClient", handle)
+
+    return () => {
+      window.removeEventListener("crm:editClient", handle)
+    }
   }, [])
+
+  // ─────────────────────────────────────────────
+  // OPEN EDIT
+  // ─────────────────────────────────────────────
+  function openEdit(client) {
+    setEditingId(client.id)
+
+    setForm({
+      name: client.name || "",
+      company: client.company || "",
+      email: client.email || "",
+      phone: client.phone || "",
+      projectName: client.projectName || "",
+      projectOwner: client.projectOwner || "",
+      projectStatus: client.projectStatus || "pendente",
+      projectProgress: client.projectProgress || 0,
+      projectValue: client.projectValue || 0,
+      paymentStatus: client.paymentStatus || "pendente",
+      startDate: client.startDate || "",
+      endDate: client.endDate || "",
+      notes: client.notes || "",
+    })
+
+    setShowForm(true)
+  }
+
+  // ─────────────────────────────────────────────
+  // CLOSE FORM
+  // ─────────────────────────────────────────────
+  function closeForm() {
+    setShowForm(false)
+    setEditingId(null)
+    setForm({})
+    setFormErrors({})
+  }
+
+  // ─────────────────────────────────────────────
+  // VALIDATION
+  // ─────────────────────────────────────────────
+  function validateForm(data) {
+    const errors = {}
+
+    if (!data.name?.trim()) {
+      errors.name = "Nome obrigatório"
+    }
+
+    if (!data.email?.trim()) {
+      errors.email = "Email obrigatório"
+    }
+
+    if (!data.projectName?.trim()) {
+      errors.projectName = "Projeto obrigatório"
+    }
+
+    return errors
+  }
+
+  // ─────────────────────────────────────────────
+  // HANDLE SAVE
+  // ─────────────────────────────────────────────
+  async function handleSave(e) {
+    e.preventDefault()
+
+    const errs = validateForm(form)
+
+    if (Object.keys(errs).length) {
+      setFormErrors(errs)
+      return
+    }
+
+    setSaving(true)
+
+    try {
+      const progress = Math.min(
+        100,
+        Math.max(0, Number(form.projectProgress) || 0)
+      )
+
+      const clientData = {
+        ...form,
+        projectValue: Number(form.projectValue) || 0,
+        projectProgress: progress,
+      }
+
+      // ─────────────────────────────────────────
+      // UPDATE CLIENT
+      // ─────────────────────────────────────────
+      if (editingId) {
+        const updated = await updateClient(editingId, clientData)
+
+        setClients(prev =>
+          prev.map(c => c.id === editingId ? updated : c)
+        )
+
+        addToast("Cliente atualizado!", "success")
+
+        closeForm()
+
+      } else {
+
+        // ───────────────────────────────────────
+        // CREATE CLIENT
+        // ───────────────────────────────────────
+        const newActivity = [{
+          id: `a${Date.now()}`,
+          type: "created",
+          text: "Cliente criado",
+          date: new Date().toISOString().split("T")[0],
+          user: user.email,
+        }]
+
+        try {
+          const newClient = await createClient(user.id, {
+            ...clientData,
+            kanbanCol: "backlog",
+            tags: [],
+            activities: newActivity,
+          })
+
+          // adiciona na lista local
+          setClients(prev => [newClient, ...prev])
+
+          // toast sucesso
+          addToast(
+            "Cliente e registro financeiro criados! 🎉",
+            "success"
+          )
+
+          closeForm()
+
+        } catch (err) {
+
+          // CLIENTE SALVO MAS FINANCEIRO FALHOU
+          if (
+            err.message?.startsWith("CLIENT_SAVED_FINANCE_FAILED:")
+            && err.clientCreated
+          ) {
+
+            setClients(prev => [
+              err.clientCreated,
+              ...prev
+            ])
+
+            addToast(
+              "Cliente criado, mas o registro financeiro não foi gerado automaticamente.",
+              "warning"
+            )
+
+            closeForm()
+
+          } else {
+
+            // ERRO TOTAL
+            throw err
+          }
+        }
+      }
+
+    } catch (err) {
+
+      addToast(
+        `Erro: ${err.message}`,
+        "error"
+      )
+
+    } finally {
+
+      setSaving(false)
+    }
+  }
+
+  return (
+    <div>
+      {/* resto do componente */}
+    </div>
+  )
+}
   const allOwners = useMemo(() => [...new Set(clients.map(c => c.projectOwner).filter(Boolean))], [clients])
   const allTags   = useMemo(() => [...new Set(clients.flatMap(c => c.tags || []))], [clients])
   function toggleSort(field) { setSortBy(prev => { const [pf,pd] = prev.split("_"); if(pf===field) return `${field}_${pd==="asc"?"desc":"asc"}`; return `${field}_asc` }); setPage(1) }

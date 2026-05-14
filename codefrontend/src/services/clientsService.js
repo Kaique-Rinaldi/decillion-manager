@@ -1,142 +1,119 @@
+// src/services/clientsService.js
 import { supabase } from "../lib/supabase"
+import { createFinancialRecordFromClient } from "./financeService"
 
-/**
- * Campos somente-leitura que NUNCA devem ser enviados num UPDATE.
- * O Supabase rejeita qualquer campo que não existe como coluna editável.
- */
-const READONLY_FIELDS = new Set(["id", "user_id", "userId", "createdAt", "created_at"])
-
-/**
- * Converte um objeto camelCase (vindo do front) para snake_case (colunas do banco).
- * Campos desconhecidos são ignorados silenciosamente.
- */
-function toSnakeCase(clientData) {
-  const MAP = {
-    name:            "name",
-    company:         "company",
-    email:           "email",
-    phone:           "phone",
-    projectName:     "project_name",
-    projectOwner:    "project_owner",
-    projectValue:    "project_value",
-    paymentStatus:   "payment_status",
-    projectStatus:   "project_status",
-    projectProgress: "project_progress",
-    startDate:       "start_date",
-    endDate:         "end_date",
-    notes:           "notes",
-    kanbanCol:       "kanban_col",
-    kanban_col:      "kanban_col",   // aceita os dois formatos
-    tags:            "tags",
-  }
-
-  const payload = {}
-  for (const [key, value] of Object.entries(clientData || {})) {
-    if (READONLY_FIELDS.has(key)) continue   // ignora id, createdAt, etc.
-    const col = MAP[key]
-    if (col && value !== undefined) payload[col] = value
-  }
-  return payload
-}
-
+// ─────────────────────────────────────────────────────────────
+// FETCH
+// ─────────────────────────────────────────────────────────────
 export async function fetchClients(userId) {
-  if (!userId) return []
-
   const { data, error } = await supabase
     .from("clients")
     .select("*")
     .eq("user_id", userId)
     .order("created_at", { ascending: false })
 
-  if (error) {
-    console.error("fetchClients error:", error)
-    return []
-  }
-
-  return (data ?? []).map(dbToClient)
+  if (error) throw error
+  return data ?? []
 }
 
+// ─────────────────────────────────────────────────────────────
+// CREATE
+// 1. Insert client into `clients`
+// 2. Auto-create financial_record if projectName + projectValue exist
+// 3. Return the created client (financial record creation is
+//    non-blocking for UX but errors are surfaced via addToast)
+// ─────────────────────────────────────────────────────────────
 export async function createClient(userId, clientData) {
-  if (!userId) throw new Error("Missing userId")
-
-  const payload = {
-    user_id: userId,
-    ...toSnakeCase(clientData),
-  }
-
-  const { data, error } = await supabase
+  // ── Step 1: create the client ──────────────────────────────
+  const { data: client, error } = await supabase
     .from("clients")
-    .insert(payload)
+    .insert({
+      user_id:          userId,
+      name:             clientData.name?.trim(),
+      email:            clientData.email?.trim(),
+      phone:            clientData.phone?.trim() || null,
+      company:          clientData.company?.trim() || null,
+      project_name:     clientData.projectName?.trim() || null,
+      project_owner:    clientData.projectOwner?.trim() || null,
+      project_value:    Number(clientData.projectValue) || 0,
+      project_status:   clientData.projectStatus   || "andamento",
+      payment_status:   clientData.paymentStatus   || "pendente",
+      project_progress: Number(clientData.projectProgress) || 0,
+      start_date:       clientData.startDate  || null,
+      end_date:         clientData.endDate    || null,
+      notes:            clientData.notes?.trim() || null,
+      kanban_col:       clientData.kanbanCol   || "backlog",
+      tags:             clientData.tags        || [],
+      activities:       clientData.activities  || [],
+    })
     .select()
     .single()
 
-  if (error) {
-    console.error("createClient error:", error)
-    throw error
+  if (error) throw error
+
+  // ── Step 2: auto-create financial record ───────────────────
+  // Uses camelCase fields that match what App.jsx passes in.
+  // Failures here do NOT prevent the client from being saved —
+  // we throw so the caller (ClientsView) can toast the user.
+  try {
+    await createFinancialRecordFromClient({
+      id:          client.id,
+      projectName: client.project_name,
+      projectValue: client.project_value,
+      startDate:   client.start_date,
+      endDate:     client.end_date,
+    })
+  } catch (finErr) {
+    // Client already saved — surface as a non-fatal warning
+    console.warn("[clientsService] Auto-create financial record failed:", finErr.message)
+    // Re-throw so ClientsView can addToast a warning if desired
+    // Wrapping in a distinct error type so callers can distinguish
+    const warn = new Error("CLIENT_SAVED_FINANCE_FAILED:" + finErr.message)
+    warn.clientCreated = client   // attach the client so caller still uses it
+    throw warn
   }
 
-  return dbToClient(data)
+  return client
 }
 
-export async function updateClient(clientId, clientData) {
-  if (!clientId) return null
+// ─────────────────────────────────────────────────────────────
+// UPDATE
+// ─────────────────────────────────────────────────────────────
+export async function updateClient(id, clientData) {
+  const patch = {}
 
-  const payload = toSnakeCase(clientData)
-
-  if (Object.keys(payload).length === 0) {
-    console.warn("updateClient: nenhum campo válido para atualizar", clientData)
-    return null
-  }
+  if (clientData.name             !== undefined) patch.name             = clientData.name?.trim()
+  if (clientData.email            !== undefined) patch.email            = clientData.email?.trim()
+  if (clientData.phone            !== undefined) patch.phone            = clientData.phone?.trim() || null
+  if (clientData.company          !== undefined) patch.company          = clientData.company?.trim() || null
+  if (clientData.projectName      !== undefined) patch.project_name     = clientData.projectName?.trim() || null
+  if (clientData.projectOwner     !== undefined) patch.project_owner    = clientData.projectOwner?.trim() || null
+  if (clientData.projectValue     !== undefined) patch.project_value    = Number(clientData.projectValue) || 0
+  if (clientData.projectStatus    !== undefined) patch.project_status   = clientData.projectStatus
+  if (clientData.paymentStatus    !== undefined) patch.payment_status   = clientData.paymentStatus
+  if (clientData.projectProgress  !== undefined) patch.project_progress = Number(clientData.projectProgress) || 0
+  if (clientData.startDate        !== undefined) patch.start_date       = clientData.startDate || null
+  if (clientData.endDate          !== undefined) patch.end_date         = clientData.endDate   || null
+  if (clientData.notes            !== undefined) patch.notes            = clientData.notes?.trim() || null
+  if (clientData.kanbanCol        !== undefined) patch.kanban_col       = clientData.kanbanCol
+  if (clientData.tags             !== undefined) patch.tags             = clientData.tags
+  if (clientData.activities       !== undefined) patch.activities       = clientData.activities
 
   const { data, error } = await supabase
     .from("clients")
-    .update(payload)
-    .eq("id", clientId)
+    .update(patch)
+    .eq("id", id)
     .select()
     .single()
 
-  if (error) {
-    console.error("updateClient error:", error)
-    throw error
-  }
-
-  return dbToClient(data)
+  if (error) throw error
+  return data
 }
 
-export async function deleteClient(clientId) {
-  if (!clientId) return
-
-  const { error } = await supabase
-    .from("clients")
-    .delete()
-    .eq("id", clientId)
-
-  if (error) {
-    console.error("deleteClient error:", error)
-    throw error
-  }
-}
-
-function dbToClient(row) {
-  if (!row) return null
-
-  return {
-    id:              row.id,
-    name:            row.name            || "",
-    company:         row.company         || "",
-    email:           row.email           || "",
-    phone:           row.phone           || "",
-    projectName:     row.project_name    || "",
-    projectOwner:    row.project_owner   || "",
-    projectValue:    Number(row.project_value    || 0),
-    paymentStatus:   row.payment_status  || "pendente",
-    projectStatus:   row.project_status  || "andamento",
-    projectProgress: Number(row.project_progress || 0),
-    startDate:       row.start_date,
-    endDate:         row.end_date,
-    notes:           row.notes           || "",
-    kanbanCol:       row.kanban_col      || "backlog",
-    tags:            row.tags            || [],
-    createdAt:       row.created_at,
-  }
+// ─────────────────────────────────────────────────────────────
+// DELETE
+// ─────────────────────────────────────────────────────────────
+export async function deleteClient(id) {
+  const { error } = await supabase.from("clients").delete().eq("id", id)
+  if (error) throw error
 }

@@ -1,4 +1,8 @@
 // src/hooks/usePayments.js
+// No logic changes needed here — recalculateRecord() in financeService.js
+// already calls syncClientPaymentStatus() after every mutation.
+// This file is provided as-is for completeness.
+
 import { useState, useEffect, useCallback } from "react"
 import {
   fetchPayments,
@@ -29,6 +33,11 @@ export function usePayments(financialRecordId, onRecordUpdated, addToast) {
 
   useEffect(() => { load() }, [load])
 
+  // After any payment mutation:
+  // 1. Re-fetch payments list
+  // 2. Recalculate financial_record (received/remaining/status)
+  //    → recalculateRecord also calls syncClientPaymentStatus internally
+  // 3. Notify FinancePage/FinanceDrawer via onRecordUpdated
   const afterMutation = useCallback(async () => {
     const [pays, updatedRecord] = await Promise.all([
       fetchPayments(financialRecordId),
@@ -91,7 +100,7 @@ export function usePayments(financialRecordId, onRecordUpdated, addToast) {
   return {
     payments,
     loading,
-    reload:          load,
+    reload:       load,
     addPayment,
     editPayment,
     markPaid,

@@ -3,9 +3,6 @@ import { supabase } from "../lib/supabase"
 
 // ─────────────────────────────────────────────────────────────
 // FINANCIAL RECORDS
-// BUG FIX: fetchFinancialRecords no longer accepts filter params.
-// Filtering is done client-side in useFinance to avoid invalid
-// Supabase queries (e.g. .eq("status","all") breaking the request).
 // ─────────────────────────────────────────────────────────────
 
 export async function fetchFinancialRecords() {
@@ -38,27 +35,87 @@ export async function fetchFinancialRecord(id) {
 export async function createFinancialRecord(payload) {
   const totalAmount = Number(payload.total_amount) || 0
 
-  const insert = {
-    client_id:        payload.client_id,
-    title:            payload.title?.trim(),
-    description:      payload.description?.trim() || null,
-    total_amount:     totalAmount,
-    received_amount:  0,
-    remaining_amount: totalAmount,   // BUG FIX: always set on create
-    status:           "pending",     // BUG FIX: always "pending" on create
-    start_date:       payload.start_date || null,
-    due_date:         payload.due_date   || null,
-    notes:            payload.notes?.trim() || null,
-  }
-
   const { data, error } = await supabase
     .from("financial_records")
-    .insert(insert)
+    .insert({
+      client_id:        payload.client_id,
+      title:            payload.title?.trim(),
+      description:      payload.description?.trim() || null,
+      total_amount:     totalAmount,
+      received_amount:  0,
+      remaining_amount: totalAmount,
+      status:           "pending",
+      start_date:       payload.start_date || null,
+      due_date:         payload.due_date   || null,
+      notes:            payload.notes?.trim() || null,
+    })
     .select(`*, clients ( id, name, company )`)
     .single()
 
   if (error) throw error
   return data
+}
+
+// ─────────────────────────────────────────────────────────────
+// AUTO-CREATE FROM CLIENT
+// Called right after createClient() succeeds.
+// Silently returns null if projectName or projectValue are
+// missing/zero — no crash, no orphan record.
+// ─────────────────────────────────────────────────────────────
+export async function createFinancialRecordFromClient(client) {
+  const title  = client.projectName?.trim()
+  const amount = Number(client.projectValue) || 0
+
+  // Guard: only create when meaningful data exists
+  if (!title || amount <= 0) return null
+
+  const { data, error } = await supabase
+    .from("financial_records")
+    .insert({
+      client_id:        client.id,
+      title,
+      description:      "Registro financeiro criado automaticamente",
+      total_amount:     amount,
+      received_amount:  0,
+      remaining_amount: amount,
+      status:           "pending",
+      start_date:       client.startDate || null,
+      due_date:         client.endDate   || null,
+      notes:            null,
+    })
+    .select(`*, clients ( id, name, company )`)
+    .single()
+
+  if (error) throw error
+  return data
+}
+
+// ─────────────────────────────────────────────────────────────
+// SYNC CLIENT PAYMENT STATUS
+// Maps financial_record.status → clients.payment_status so the
+// CRM Clients table always reflects the real payment state.
+//
+//  paid    → "pago"
+//  partial → "pendente"  (change to "parcial" if your enum has it)
+//  overdue → "atrasado"
+//  pending → "pendente"
+// ─────────────────────────────────────────────────────────────
+export async function syncClientPaymentStatus(clientId, financialStatus) {
+  if (!clientId) return
+
+  const STATUS_MAP = {
+    paid:    "pago",
+    partial: "pendente",
+    overdue: "atrasado",
+    pending: "pendente",
+  }
+
+  const { error } = await supabase
+    .from("clients")
+    .update({ payment_status: STATUS_MAP[financialStatus] ?? "pendente" })
+    .eq("id", clientId)
+
+  if (error) throw error
 }
 
 export async function updateFinancialRecord(id, payload) {
@@ -87,7 +144,11 @@ export async function deleteFinancialRecord(id) {
   if (error) throw error
 }
 
-// Recalculates received/remaining/status after payment changes
+// ─────────────────────────────────────────────────────────────
+// RECALCULATE + SYNC
+// Recomputes received/remaining/status from all payments,
+// updates financial_records, then syncs clients.payment_status.
+// ─────────────────────────────────────────────────────────────
 export async function recalculateRecord(recordId) {
   const { data: payments, error: pe } = await supabase
     .from("payments")
@@ -98,7 +159,7 @@ export async function recalculateRecord(recordId) {
 
   const { data: record, error: re } = await supabase
     .from("financial_records")
-    .select("total_amount")
+    .select("total_amount, client_id")
     .eq("id", recordId)
     .single()
 
@@ -132,13 +193,16 @@ export async function recalculateRecord(recordId) {
     .single()
 
   if (error) throw error
+
+  // Sync payment status back to clients (non-blocking — won't crash payments flow)
+  syncClientPaymentStatus(record.client_id, status).catch(() => {})
+
   return data
 }
 
 // ─────────────────────────────────────────────────────────────
 // ANALYTICS
 // ─────────────────────────────────────────────────────────────
-
 export async function fetchFinanceStats() {
   const { data, error } = await supabase
     .from("financial_records")
