@@ -2,217 +2,179 @@
 import { supabase } from "../lib/supabase"
 
 // ─────────────────────────────────────────────────────────────
-// PROJECT FINANCES  (vinculado diretamente ao client_id)
+// FINANCIAL RECORDS
 // ─────────────────────────────────────────────────────────────
 
-/**
- * Busca o financeiro pelo client_id.
- */
-export async function fetchProjectFinanceByClient(clientId) {
-  const { data, error } = await supabase
-    .from("project_finances")
-    .select("*")
-    .eq("client_id", clientId)
-    .order("created_at", { ascending: true })
-    .limit(1)
-    .maybeSingle()
-
-  if (error) throw error
-  return data ?? null
-}
-
-/**
- * Busca o financeiro pelo seu próprio id (para refresh após operações).
- */
-export async function fetchProjectFinance_byId(financeId) {
-  const { data, error } = await supabase
-    .from("project_finances")
-    .select("*")
-    .eq("id", financeId)
-    .single()
-
-  if (error) throw error
-  return data
-}
-
-/**
- * Garante que o financeiro exista para o cliente.
- *
- * Fluxo:
- *   1. Busca por client_id
- *   2. Se já existir → retorna sem criar nada
- *   3. Se não existir → cria diretamente com client_id
- *
- * Retorna { data: ProjectFinance, alreadyExisted: boolean }
- *
- * ✅ Zero inserts em `projects`
- * ✅ Zero FK errors em `projects`
- * ✅ Zero RLS errors em `projects`
- */
-export async function ensureProjectFinance(clientId, payload = {}) {
-  // ── Etapa 1: verificar existência ──────────────────────────
-  const existing = await fetchProjectFinanceByClient(clientId)
-  if (existing) {
-    return { data: existing, alreadyExisted: true }
-  }
-
-  // ── Etapa 2: criar financeiro vinculado ao cliente ─────────
-  const { data, error } = await supabase
-    .from("project_finances")
-    .insert({
-      client_id:    clientId,
-      total_amount: Number(payload.total_amount) || 0,
-      payment_type: payload.payment_type || null,
-      notes:        payload.notes?.trim() || null,
-    })
-    .select()
-    .single()
-
-  if (error) {
-    // Corrida rara: outro processo criou entre o select e o insert
-    if (error.code === "23505") {
-      const fallback = await fetchProjectFinanceByClient(clientId)
-      if (fallback) return { data: fallback, alreadyExisted: true }
-    }
-    throw error
-  }
-
-  return { data, alreadyExisted: false }
-}
-
-// Alias de compatibilidade para chamadas antigas
-export async function createProjectFinance(clientId, _projectId, payload) {
-  const { data } = await ensureProjectFinance(clientId, payload)
-  return data
-}
-
-export async function updateProjectFinance(financeId, payload) {
-  const patch = {}
-  if (payload.total_amount !== undefined) patch.total_amount = Number(payload.total_amount)
-  if (payload.payment_type !== undefined) patch.payment_type = payload.payment_type
-  if (payload.notes        !== undefined) patch.notes        = payload.notes?.trim() || null
-
-  const { data, error } = await supabase
-    .from("project_finances")
-    .update(patch)
-    .eq("id", financeId)
-    .select()
-    .single()
-
-  if (error) throw error
-  return data
-}
-
-// ─────────────────────────────────────────────────────────────
-// PAYMENTS
-// ─────────────────────────────────────────────────────────────
-
-export async function fetchPaymentsByFinance(financeId) {
-  const { data, error } = await supabase
-    .from("payments")
-    .select("*")
-    .eq("finance_id", financeId)
-    .order("due_date", { ascending: true })
-
-  if (error) throw error
-  return data ?? []
-}
-
-export async function createPayment(financeId, form) {
-  const { data, error } = await supabase
-    .from("payments")
-    .insert({
-      finance_id:     financeId,
-      title:          form.title?.trim(),
-      description:    form.description?.trim() || null,
-      amount:         Number(form.amount),
-      status:         form.status         || "pending",
-      payment_method: form.payment_method || "pix",
-      due_date:       form.due_date       || null,
-      paid_at:        form.status === "paid"
-                        ? (form.paid_at || new Date().toISOString().slice(0, 10))
-                        : null,
-      notes:          form.notes?.trim() || null,
-    })
-    .select()
-    .single()
-
-  if (error) throw error
-  return data
-}
-
-export async function updatePayment(id, form) {
-  const payload = {}
-  if (form.title          !== undefined) payload.title          = form.title?.trim()
-  if (form.description    !== undefined) payload.description    = form.description?.trim() || null
-  if (form.amount         !== undefined) payload.amount         = Number(form.amount)
-  if (form.status         !== undefined) payload.status         = form.status
-  if (form.payment_method !== undefined) payload.payment_method = form.payment_method
-  if (form.due_date       !== undefined) payload.due_date       = form.due_date || null
-  if (form.notes          !== undefined) payload.notes          = form.notes?.trim() || null
-
-  if (form.status === "paid") {
-    payload.paid_at = form.paid_at || new Date().toISOString().slice(0, 10)
-  } else if (form.status && form.status !== "paid") {
-    payload.paid_at = null
-  }
-
-  const { data, error } = await supabase
-    .from("payments")
-    .update(payload)
-    .eq("id", id)
-    .select()
-    .single()
-
-  if (error) throw error
-  return data
-}
-
-export async function markPaymentPaid(paymentId, financeId) {
-  const payment = await updatePayment(paymentId, {
-    status:  "paid",
-    paid_at: new Date().toISOString().slice(0, 10),
-  })
-  const finance = await fetchProjectFinance_byId(financeId)
-  return { payment, finance }
-}
-
-export async function deletePayment(id) {
-  const { error } = await supabase.from("payments").delete().eq("id", id)
-  if (error) throw error
-}
-
-// ─────────────────────────────────────────────────────────────
-// VISÃO GLOBAL / ANALYTICS
-// ─────────────────────────────────────────────────────────────
-
-export async function fetchAllPayments() {
-  const { data, error } = await supabase
-    .from("payments")
+export async function fetchFinancialRecords(filters = {}) {
+  let query = supabase
+    .from("financial_records")
     .select(`
       *,
-      project_finances (
-        id, total_amount, received_amount, remaining_amount,
-        progress_percentage, status,
-        clients ( id, name, company )
-      )
-    `)
-    .order("due_date", { ascending: true })
-
-  if (error) throw error
-  return data ?? []
-}
-
-export async function fetchFinanceAnalytics() {
-  const { data, error } = await supabase
-    .from("project_finances")
-    .select(`
-      id, total_amount, received_amount, remaining_amount,
-      progress_percentage, status, created_at,
-      clients ( id, name, company )
+      clients ( id, name, company, avatar_url )
     `)
     .order("created_at", { ascending: false })
 
+  if (filters.status && filters.status !== "all") {
+    query = query.eq("status", filters.status)
+  }
+  if (filters.search) {
+    query = query.or(
+      `title.ilike.%${filters.search}%,description.ilike.%${filters.search}%`
+    )
+  }
+  if (filters.client_id) {
+    query = query.eq("client_id", filters.client_id)
+  }
+
+  const { data, error } = await query
   if (error) throw error
   return data ?? []
+}
+
+export async function fetchFinancialRecord(id) {
+  const { data, error } = await supabase
+    .from("financial_records")
+    .select(`
+      *,
+      clients ( id, name, company, avatar_url )
+    `)
+    .eq("id", id)
+    .single()
+
+  if (error) throw error
+  return data
+}
+
+export async function createFinancialRecord(payload) {
+  const { data, error } = await supabase
+    .from("financial_records")
+    .insert({
+      client_id:    payload.client_id,
+      title:        payload.title?.trim(),
+      description:  payload.description?.trim() || null,
+      total_amount: Number(payload.total_amount) || 0,
+      start_date:   payload.start_date || null,
+      due_date:     payload.due_date   || null,
+      notes:        payload.notes?.trim() || null,
+      status:       "pending",
+      received_amount:  0,
+      remaining_amount: Number(payload.total_amount) || 0,
+    })
+    .select(`*, clients ( id, name, company, avatar_url )`)
+    .single()
+
+  if (error) throw error
+  return data
+}
+
+export async function updateFinancialRecord(id, payload) {
+  const patch = {}
+  if (payload.title        !== undefined) patch.title        = payload.title?.trim()
+  if (payload.description  !== undefined) patch.description  = payload.description?.trim() || null
+  if (payload.total_amount !== undefined) patch.total_amount = Number(payload.total_amount)
+  if (payload.start_date   !== undefined) patch.start_date   = payload.start_date || null
+  if (payload.due_date     !== undefined) patch.due_date     = payload.due_date   || null
+  if (payload.notes        !== undefined) patch.notes        = payload.notes?.trim() || null
+  if (payload.status       !== undefined) patch.status       = payload.status
+
+  const { data, error } = await supabase
+    .from("financial_records")
+    .update(patch)
+    .eq("id", id)
+    .select(`*, clients ( id, name, company, avatar_url )`)
+    .single()
+
+  if (error) throw error
+  return data
+}
+
+export async function deleteFinancialRecord(id) {
+  const { error } = await supabase.from("financial_records").delete().eq("id", id)
+  if (error) throw error
+}
+
+// Recalcula received/remaining/status após mudança de pagamentos
+export async function recalculateRecord(recordId) {
+  const { data: payments, error: pe } = await supabase
+    .from("payments")
+    .select("amount, status")
+    .eq("financial_record_id", recordId)
+
+  if (pe) throw pe
+
+  const { data: record, error: re } = await supabase
+    .from("financial_records")
+    .select("total_amount")
+    .eq("id", recordId)
+    .single()
+
+  if (re) throw re
+
+  const received = payments
+    .filter(p => p.status === "paid")
+    .reduce((acc, p) => acc + Number(p.amount), 0)
+
+  const total     = Number(record.total_amount)
+  const remaining = Math.max(total - received, 0)
+
+  let status = "pending"
+  if (received >= total && total > 0) status = "paid"
+  else if (received > 0) status = "partial"
+  else {
+    // verificar inadimplência pelo due_date dos pagamentos pendentes
+    const today = new Date().toISOString().slice(0, 10)
+    const overdue = payments.some(
+      p => p.status === "pending" && p.due_date && p.due_date < today
+    )
+    if (overdue) status = "overdue"
+  }
+
+  const { data, error } = await supabase
+    .from("financial_records")
+    .update({ received_amount: received, remaining_amount: remaining, status })
+    .eq("id", recordId)
+    .select(`*, clients ( id, name, company, avatar_url )`)
+    .single()
+
+  if (error) throw error
+  return data
+}
+
+// ─────────────────────────────────────────────────────────────
+// ANALYTICS
+// ─────────────────────────────────────────────────────────────
+
+export async function fetchFinanceStats() {
+  const { data, error } = await supabase
+    .from("financial_records")
+    .select("total_amount, received_amount, remaining_amount, status, due_date")
+
+  if (error) throw error
+
+  const today = new Date().toISOString().slice(0, 10)
+  const thisMonth = today.slice(0, 7)
+
+  const totalRevenue  = data.reduce((s, r) => s + Number(r.total_amount),    0)
+  const totalReceived = data.reduce((s, r) => s + Number(r.received_amount), 0)
+  const totalPending  = data.filter(r => r.status === "pending" || r.status === "partial")
+                             .reduce((s, r) => s + Number(r.remaining_amount), 0)
+  const totalOverdue  = data.filter(r => r.status === "overdue")
+                             .reduce((s, r) => s + Number(r.remaining_amount), 0)
+
+  // Received this month: would need payments table — approximate from records
+  const receivedThisMonth = data
+    .filter(r => r.status === "paid" && r.due_date?.startsWith(thisMonth))
+    .reduce((s, r) => s + Number(r.received_amount), 0)
+
+  return {
+    totalRevenue,
+    totalReceived,
+    totalPending,
+    totalOverdue,
+    receivedThisMonth,
+    countRecords:  data.length,
+    countOverdue:  data.filter(r => r.status === "overdue").length,
+    countPaid:     data.filter(r => r.status === "paid").length,
+    countPending:  data.filter(r => r.status === "pending" || r.status === "partial").length,
+  }
 }
