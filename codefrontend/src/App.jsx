@@ -10,7 +10,7 @@ import KanbanPage        from "./components/pages/KanbanPage"
 import TasksPage         from "./components/pages/TasksPage"
 
 import { fetchClients, createClient, updateClient, deleteClient } from "./services/clientsService"
-import { fetchDeals, updateDeal }                                  from "./services/dealsService"
+import { fetchDeals, createDeal, updateDeal, deleteDeal }         from "./services/dealsService"
 import { updateTask }                                              from "./services/tasksService"
 import { createNotification, fetchNotifications, markAllAsRead, markOneAsRead } from "./services/notificationService"
 
@@ -229,7 +229,7 @@ function CommandPalette({open,onClose,clients,setActiveTab,openClientModal}) {
   },[dq,clients])
   if(!open) return null
   return (
-    <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,.65)",zIndex:2000,display:"flex",alignItems:"flex-start",justifyContent:"center",paddingTop:80,backdropFilter:"blur(6px)",padding:"80px 16px 0"}} onClick={onClose}>
+    <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,.65)",zIndex:2000,display:"flex",alignItems:"flex-start",justifyContent:"center",backdropFilter:"blur(6px)",padding:"80px 16px 0"}} onClick={onClose}>
       <motion.div initial={{scale:.96,opacity:0,y:-8}} animate={{scale:1,opacity:1,y:0}} exit={{scale:.96,opacity:0}} transition={{duration:.15}} onClick={e=>e.stopPropagation()} style={{background:"#111520",border:"1px solid rgba(255,255,255,.12)",borderRadius:16,width:"100%",maxWidth:560,boxShadow:"0 24px 80px rgba(0,0,0,.6)",overflow:"hidden"}}>
         <div style={{display:"flex",alignItems:"center",gap:10,padding:"14px 16px",borderBottom:"1px solid rgba(255,255,255,.07)"}}>
           <Icon d="M21 21l-4.35-4.35M17 11A6 6 0 1 1 5 11a6 6 0 0 1 12 0z" size={16}/>
@@ -276,7 +276,6 @@ function ClientDetailModal({client,onClose,onEdit,onAddActivity}) {
         onClick={e=>e.stopPropagation()}
         style={{background:"#111520",border:"1px solid rgba(255,255,255,.1)",borderRadius:isMobile?"18px 18px 0 0":18,width:"100%",maxWidth:isMobile?"100%":700,maxHeight:isMobile?"92vh":"88vh",display:"flex",flexDirection:"column",boxShadow:"0 28px 80px rgba(0,0,0,.6)",overflow:"hidden"}}
       >
-        {/* drag handle on mobile */}
         {isMobile&&<div style={{display:"flex",justifyContent:"center",padding:"10px 0 4px"}}><div style={{width:36,height:4,borderRadius:4,background:"rgba(255,255,255,.15)"}}/></div>}
         <div style={{padding:isMobile?"12px 16px":"20px 24px",borderBottom:"1px solid rgba(255,255,255,.07)",display:"flex",alignItems:"center",gap:12,flexShrink:0}}>
           <div style={{width:40,height:40,borderRadius:10,background:pal.bg,color:pal.fg,display:"flex",alignItems:"center",justifyContent:"center",fontSize:13,fontWeight:700,flexShrink:0}}>{initials(client.name)}</div>
@@ -296,7 +295,7 @@ function ClientDetailModal({client,onClose,onEdit,onAddActivity}) {
         <div style={{flex:1,overflowY:"auto",padding:isMobile?16:24}}>
           {tab==="overview"&&(
             <div>
-              <div style={{display:"grid",gridTemplateColumns:isMobile?"1fr 1fr":"1fr 1fr",gap:10,marginBottom:16}}>
+              <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10,marginBottom:16}}>
                 {[{l:"Valor do projeto",v:formatCurrency(client.projectValue),c:"#22c97d"},{l:"Telefone",v:client.phone||"—",c:"#e8eaf0"},{l:"Início",v:formatDate(client.startDate),c:"#e8eaf0"},{l:"Entrega",v:formatDate(client.endDate),c:"#e8eaf0"},{l:"Responsável",v:client.projectOwner||"—",c:"#e8eaf0"},{l:"ID",v:client.id,c:"#5a6478"}].map(f=>(
                   <div key={f.l} style={{background:"#161b2a",borderRadius:9,padding:"10px 12px",border:"1px solid rgba(255,255,255,.06)"}}>
                     <div style={{fontSize:9,color:"#5a6478",fontFamily:"monospace",textTransform:"uppercase",letterSpacing:".5px",marginBottom:5}}>{f.l}</div>
@@ -399,40 +398,193 @@ function DashboardView({clients,deals}) {
   )
 }
 
-function PipelineView({deals,setDeals,addToast}) {
+// ─── PIPELINE VIEW (com botão + nova negociação) ──────────────────
+function PipelineView({deals,setDeals,addToast,user}) {
   const isMobile = useIsMobile()
-  const [draggingId,setDraggingId]=useState(null); const [overStage,setOverStage]=useState(null)
+  const [draggingId,setDraggingId]=useState(null)
+  const [overStage,setOverStage]=useState(null)
+  const [showForm,setShowForm]=useState(false)
+  const [saving,setSaving]=useState(false)
+  const [confirmId,setConfirmId]=useState(null)
+  const [form,setForm]=useState({name:"",company:"",value:"",stage:"lead"})
+  const [formErrors,setFormErrors]=useState({})
+
   const totalValue=deals.reduce((s,d)=>s+d.value,0)
   const openDeals=deals.filter(d=>d.stage!=="fechado")
   const avgTicket=openDeals.length>0?openDeals.reduce((s,d)=>s+d.value,0)/openDeals.length:0
+
   async function onDrop(targetStage) {
     setOverStage(null); if(!draggingId) return
     const deal=deals.find(d=>d.id===draggingId)
     if(!deal||deal.stage===targetStage){setDraggingId(null);return}
     const allowed=ALLOWED_TRANSITIONS[deal.stage]??[]
-    if(!allowed.includes(targetStage)){addToast(`Transição não permitida.`,"error");setDraggingId(null);return}
+    if(!allowed.includes(targetStage)){addToast("Transição não permitida.","error");setDraggingId(null);return}
     const closedAt=targetStage==="fechado"?new Date().toISOString().split("T")[0]:null
     setDeals(prev=>prev.map(d=>d.id===draggingId?{...d,stage:targetStage,closedAt}:d))
     try{await updateDeal(draggingId,{stage:targetStage,closedAt});addToast(`Movido para "${PIPELINE_STAGE[targetStage].label}"`,"success")}
     catch{setDeals(prev=>prev.map(d=>d.id===draggingId?{...d,stage:deal.stage,closedAt:deal.closedAt}:d));addToast("Erro ao mover negociação.","error")}
     setDraggingId(null)
   }
+
+  function validateForm(f) {
+    const e={}
+    if(!f.name?.trim())             e.name="Nome obrigatório"
+    if(!f.value||Number(f.value)<=0) e.value="Valor deve ser > 0"
+    return e
+  }
+
+  async function handleCreate(e) {
+    e.preventDefault()
+    const errs=validateForm(form); if(Object.keys(errs).length){setFormErrors(errs);return}
+    setSaving(true)
+    try {
+      const newDeal=await createDeal(user.id,{name:form.name.trim(),company:form.company.trim(),value:Number(form.value),stage:form.stage})
+      setDeals(prev=>[newDeal,...prev])
+      addToast("Negociação criada!","success")
+      setShowForm(false)
+      setForm({name:"",company:"",value:"",stage:"lead"})
+      setFormErrors({})
+    } catch(err){addToast(`Erro: ${err.message}`,"error")}
+    finally{setSaving(false)}
+  }
+
+  async function handleDelete(id) {
+    try{await deleteDeal(id);setDeals(prev=>prev.filter(d=>d.id!==id));addToast("Negociação removida.","warning")}
+    catch(err){addToast(`Erro: ${err.message}`,"error")}
+    setConfirmId(null)
+  }
+
+  const inputStyle={background:"#1c2236",border:"1px solid rgba(255,255,255,.12)",borderRadius:8,padding:"10px 12px",fontSize:14,color:"#e8eaf0",fontFamily:"inherit",outline:"none",width:"100%",boxSizing:"border-box",minHeight:44}
+
   return (
     <div>
-      <div style={{display:"grid",gridTemplateColumns:isMobile?"repeat(2,1fr)":"repeat(5,1fr)",gap:8,marginBottom:16,overflowX:isMobile?"auto":"visible"}}>
+      {/* ── Header com botão ── */}
+      <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:16}}>
+        <div style={{fontSize:12,color:"#5a6478",fontFamily:"monospace"}}>
+          {openDeals.length} negociação{openDeals.length!==1?"s":""} em aberto
+        </div>
+        <button
+          onClick={()=>setShowForm(true)}
+          style={{display:"flex",alignItems:"center",gap:6,padding:"8px 16px",borderRadius:8,background:"#4f6ef7",border:"none",color:"#fff",fontSize:13,fontWeight:600,cursor:"pointer",fontFamily:"inherit",minHeight:38}}
+        >
+          + Nova negociação
+        </button>
+      </div>
+
+      {/* ── Modal criar negociação ── */}
+      <AnimatePresence>
+        {showForm&&(
+          <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,.65)",zIndex:1000,display:"flex",alignItems:isMobile?"flex-end":"center",justifyContent:"center",padding:isMobile?0:20,backdropFilter:"blur(5px)"}} onClick={()=>setShowForm(false)}>
+            <motion.div
+              initial={isMobile?{y:"100%"}:{scale:.93,opacity:0,y:10}}
+              animate={isMobile?{y:0}:{scale:1,opacity:1,y:0}}
+              exit={isMobile?{y:"100%"}:{scale:.93,opacity:0}}
+              transition={{duration:.2}}
+              onClick={e=>e.stopPropagation()}
+              style={{background:"#111520",border:"1px solid rgba(255,255,255,.1)",borderRadius:isMobile?"18px 18px 0 0":14,width:"100%",maxWidth:isMobile?"100%":460,boxShadow:"0 20px 60px rgba(0,0,0,.5)"}}
+            >
+              {isMobile&&<div style={{display:"flex",justifyContent:"center",padding:"10px 0 4px"}}><div style={{width:36,height:4,borderRadius:4,background:"rgba(255,255,255,.15)"}}/></div>}
+              <div style={{padding:isMobile?"12px 16px":"20px 24px 0",display:"flex",alignItems:"center",justifyContent:"space-between"}}>
+                <div style={{fontSize:15,fontWeight:600,color:"#e8eaf0"}}>➕ Nova negociação</div>
+                <button onClick={()=>setShowForm(false)} style={{background:"none",border:"1px solid rgba(255,255,255,.1)",borderRadius:7,color:"#8892a4",cursor:"pointer",width:32,height:32,display:"flex",alignItems:"center",justifyContent:"center",fontSize:18}}>×</button>
+              </div>
+              <form onSubmit={handleCreate} noValidate style={{padding:isMobile?"16px 16px 32px":"20px 24px 24px"}}>
+                <div style={{marginBottom:12}}>
+                  <div style={{fontSize:11,color:"#5a6478",fontFamily:"monospace",textTransform:"uppercase",letterSpacing:".5px",marginBottom:6}}>Nome da negociação *</div>
+                  <input type="text" value={form.name} onChange={e=>{setForm(p=>({...p,name:e.target.value}));setFormErrors(p=>({...p,name:""}))}} placeholder="Ex: Proposta Redesign" style={{...inputStyle,borderColor:formErrors.name?"#ef4444":"rgba(255,255,255,.12)"}}/>
+                  {formErrors.name&&<div style={{fontSize:11,color:"#ef4444",marginTop:4}}>{formErrors.name}</div>}
+                </div>
+                <div style={{marginBottom:12}}>
+                  <div style={{fontSize:11,color:"#5a6478",fontFamily:"monospace",textTransform:"uppercase",letterSpacing:".5px",marginBottom:6}}>Empresa</div>
+                  <input type="text" value={form.company} onChange={e=>setForm(p=>({...p,company:e.target.value}))} placeholder="Ex: Empresa S.A." style={inputStyle}/>
+                </div>
+                <div style={{marginBottom:12}}>
+                  <div style={{fontSize:11,color:"#5a6478",fontFamily:"monospace",textTransform:"uppercase",letterSpacing:".5px",marginBottom:6}}>Valor (R$) *</div>
+                  <input type="number" min="0" step="0.01" value={form.value} onChange={e=>{setForm(p=>({...p,value:e.target.value}));setFormErrors(p=>({...p,value:""}))}} placeholder="0,00" style={{...inputStyle,borderColor:formErrors.value?"#ef4444":"rgba(255,255,255,.12)"}}/>
+                  {formErrors.value&&<div style={{fontSize:11,color:"#ef4444",marginTop:4}}>{formErrors.value}</div>}
+                </div>
+                <div style={{marginBottom:16}}>
+                  <div style={{fontSize:11,color:"#5a6478",fontFamily:"monospace",textTransform:"uppercase",letterSpacing:".5px",marginBottom:8}}>Etapa *</div>
+                  <div style={{display:"flex",gap:6,flexWrap:"wrap"}}>
+                    {PIPELINE_STAGE_KEYS.map(k=>{
+                      const s=PIPELINE_STAGE[k]; const active=form.stage===k
+                      return <button key={k} type="button" onClick={()=>setForm(p=>({...p,stage:k}))} style={{padding:"6px 12px",borderRadius:6,fontSize:12,cursor:"pointer",fontFamily:"inherit",border:`1px solid ${active?s.color:s.color+"40"}`,background:active?s.color+"20":"transparent",color:active?s.color:s.color+"80",transition:"all .13s",minHeight:34}}>{s.label}</button>
+                    })}
+                  </div>
+                </div>
+                <div style={{display:"flex",gap:8,paddingTop:16,borderTop:"1px solid rgba(255,255,255,.06)"}}>
+                  <button type="button" onClick={()=>setShowForm(false)} style={{flex:1,padding:"12px",borderRadius:8,background:"rgba(255,255,255,.04)",border:"1px solid rgba(255,255,255,.1)",color:"#8892a4",fontSize:13,cursor:"pointer",fontFamily:"inherit",minHeight:46}}>Cancelar</button>
+                  <button type="submit" disabled={saving} style={{flex:2,padding:"12px",borderRadius:8,background:"#4f6ef7",border:"none",color:"#fff",fontSize:13,fontWeight:600,cursor:"pointer",fontFamily:"inherit",minHeight:46,display:"flex",alignItems:"center",justifyContent:"center",gap:6}}>
+                    {saving&&<div style={{width:14,height:14,borderRadius:"50%",border:"2px solid rgba(255,255,255,.3)",borderTopColor:"#fff",animation:"spin .6s linear infinite"}}/>}
+                    {saving?"Criando…":"Criar negociação"}
+                  </button>
+                </div>
+              </form>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
+
+      {/* ── Confirm delete ── */}
+      <AnimatePresence>
+        {confirmId&&(
+          <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,.65)",zIndex:1000,display:"flex",alignItems:isMobile?"flex-end":"center",justifyContent:"center",padding:isMobile?0:20,backdropFilter:"blur(4px)"}} onClick={()=>setConfirmId(null)}>
+            <motion.div initial={isMobile?{y:"100%"}:{scale:.9,opacity:0}} animate={isMobile?{y:0}:{scale:1,opacity:1}} exit={isMobile?{y:"100%"}:{scale:.9,opacity:0}} transition={{duration:.18}} onClick={e=>e.stopPropagation()} style={{background:"#111520",border:"1px solid rgba(255,255,255,.1)",borderRadius:isMobile?"18px 18px 0 0":12,padding:isMobile?"24px 20px 32px":24,maxWidth:isMobile?"100%":340,width:"100%",textAlign:"center"}}>
+              {isMobile&&<div style={{display:"flex",justifyContent:"center",marginBottom:12}}><div style={{width:36,height:4,borderRadius:4,background:"rgba(255,255,255,.15)"}}/></div>}
+              <div style={{fontSize:32,marginBottom:10}}>🗑</div>
+              <div style={{fontSize:15,fontWeight:600,color:"#e8eaf0",marginBottom:6}}>Remover negociação?</div>
+              <div style={{fontSize:12,color:"#8892a4",marginBottom:20,lineHeight:1.6}}>Esta ação não pode ser desfeita.</div>
+              <div style={{display:"flex",gap:10}}>
+                <button onClick={()=>setConfirmId(null)} style={{flex:1,padding:"12px",borderRadius:8,background:"rgba(255,255,255,.04)",border:"1px solid rgba(255,255,255,.1)",color:"#8892a4",fontSize:13,cursor:"pointer",fontFamily:"inherit",minHeight:46}}>Cancelar</button>
+                <button onClick={()=>handleDelete(confirmId)} style={{flex:1,padding:"12px",borderRadius:8,background:"rgba(239,68,68,.15)",border:"1px solid rgba(239,68,68,.3)",color:"#ef4444",fontSize:13,fontWeight:600,cursor:"pointer",fontFamily:"inherit",minHeight:46}}>Remover</button>
+              </div>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
+
+      {/* ── Board ── */}
+      <div style={{display:"grid",gridTemplateColumns:isMobile?"repeat(2,1fr)":"repeat(5,1fr)",gap:8,marginBottom:16}}>
         {PIPELINE_STAGE_KEYS.map(stageKey=>{
           const stage=PIPELINE_STAGE[stageKey]; const stageDeals=deals.filter(d=>d.stage===stageKey); const isOver=overStage===stageKey
-          return <div key={stageKey} onDragOver={e=>{e.preventDefault();setOverStage(stageKey)}} onDragLeave={()=>setOverStage(null)} onDrop={()=>onDrop(stageKey)} style={{background:isOver?stage.color+"14":"#111520",border:`1px solid ${isOver?stage.color+"60":"rgba(255,255,255,.06)"}`,borderRadius:10,padding:10,minHeight:100,transition:"all .15s"}}>
-            <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:10}}><div style={{fontSize:10,fontWeight:700,textTransform:"uppercase",letterSpacing:".5px",fontFamily:"monospace",color:stage.color}}>{stage.label}</div><div style={{fontSize:9,padding:"1px 5px",borderRadius:4,background:stage.color+"18",color:stage.color,fontFamily:"monospace"}}>{stageDeals.length}</div></div>
-            <AnimatePresence>{stageDeals.map(d=><motion.div key={d.id} layout initial={{opacity:0,y:-4}} animate={{opacity:1,y:0}} exit={{opacity:0,scale:.95}} draggable onDragStart={()=>setDraggingId(d.id)} style={{background:"#161b2a",border:"1px solid rgba(255,255,255,.06)",borderRadius:8,padding:8,marginBottom:6,cursor:"grab",opacity:draggingId===d.id?.45:1}}><div style={{fontSize:11,fontWeight:500,color:"#e8eaf0",marginBottom:3,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{d.name}</div><div style={{fontSize:10,color:"#5a6478",marginBottom:4}}>{d.company}</div><div style={{fontSize:11,fontWeight:600,color:"#22c97d",fontFamily:"monospace"}}>{formatCurrency(d.value)}</div></motion.div>)}</AnimatePresence>
-          </div>
+          return (
+            <div key={stageKey}
+              onDragOver={e=>{e.preventDefault();setOverStage(stageKey)}}
+              onDragLeave={()=>setOverStage(null)}
+              onDrop={()=>onDrop(stageKey)}
+              style={{background:isOver?stage.color+"14":"#111520",border:`1px solid ${isOver?stage.color+"60":"rgba(255,255,255,.06)"}`,borderRadius:10,padding:10,minHeight:100,transition:"all .15s"}}
+            >
+              <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:10}}>
+                <div style={{fontSize:10,fontWeight:700,textTransform:"uppercase",letterSpacing:".5px",fontFamily:"monospace",color:stage.color}}>{stage.label}</div>
+                <div style={{fontSize:9,padding:"1px 5px",borderRadius:4,background:stage.color+"18",color:stage.color,fontFamily:"monospace"}}>{stageDeals.length}</div>
+              </div>
+              <AnimatePresence>
+                {stageDeals.map(d=>(
+                  <motion.div key={d.id} layout
+                    initial={{opacity:0,y:-4}} animate={{opacity:1,y:0}} exit={{opacity:0,scale:.95}}
+                    draggable onDragStart={()=>setDraggingId(d.id)}
+                    style={{background:"#161b2a",border:"1px solid rgba(255,255,255,.06)",borderRadius:8,padding:8,marginBottom:6,cursor:"grab",opacity:draggingId===d.id?.45:1,position:"relative"}}
+                    onMouseEnter={e=>{const b=e.currentTarget.querySelector(".del-btn");if(b)b.style.opacity="1"}}
+                    onMouseLeave={e=>{const b=e.currentTarget.querySelector(".del-btn");if(b)b.style.opacity="0"}}
+                  >
+                    <button className="del-btn" onClick={e=>{e.stopPropagation();setConfirmId(d.id)}} style={{position:"absolute",top:5,right:5,width:18,height:18,borderRadius:4,background:"rgba(239,68,68,.15)",border:"1px solid rgba(239,68,68,.25)",color:"#ef4444",cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",fontSize:10,opacity:0,transition:"opacity .15s",padding:0,lineHeight:1}}>×</button>
+                    <div style={{fontSize:11,fontWeight:500,color:"#e8eaf0",marginBottom:3,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap",paddingRight:20}}>{d.name}</div>
+                    <div style={{fontSize:10,color:"#5a6478",marginBottom:4}}>{d.company}</div>
+                    <div style={{fontSize:11,fontWeight:600,color:"#22c97d",fontFamily:"monospace"}}>{formatCurrency(d.value)}</div>
+                  </motion.div>
+                ))}
+              </AnimatePresence>
+            </div>
+          )
         })}
       </div>
+
       <div style={{display:"grid",gridTemplateColumns:isMobile?"1fr":"repeat(3,1fr)",gap:12}}>
         <StatCard label="Valor total pipeline" value={formatCurrency(totalValue)}/>
         <StatCard label="Ticket médio" value={formatCurrency(avgTicket)}/>
         <StatCard label="Em aberto" value={openDeals.length}/>
       </div>
+      <style>{`@keyframes spin{to{transform:rotate(360deg)}}`}</style>
     </div>
   )
 }
@@ -522,7 +674,6 @@ function ClientsView({clients,setClients,addToast,openClientModal,user,dataLoadi
   const inputStyle={background:"#161b2a",border:"1px solid rgba(255,255,255,.15)",borderRadius:7,padding:"10px 12px",fontSize:14,color:"#e8eaf0",fontFamily:"inherit",outline:"none",width:"100%",boxSizing:"border-box",minHeight:44}
   const chipStyle=active=>({padding:"6px 12px",borderRadius:20,fontSize:12,cursor:"pointer",border:"1px solid",fontFamily:"inherit",transition:"all .13s",borderColor:active?"#4f6ef7":"rgba(255,255,255,.1)",background:active?"#4f6ef7":"transparent",color:active?"#fff":"#8892a4",minHeight:36,display:"inline-flex",alignItems:"center"})
 
-  // Mobile: card list instead of table
   if (isMobile) return (
     <div>
       <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8,marginBottom:12}}>
@@ -540,11 +691,9 @@ function ClientsView({clients,setClients,addToast,openClientModal,user,dataLoadi
         </div>
         <button onClick={openCreate} style={{padding:"10px 14px",borderRadius:8,background:"#4f6ef7",border:"none",color:"#fff",fontSize:13,fontWeight:600,cursor:"pointer",fontFamily:"inherit",minHeight:44,flexShrink:0}}>+ Novo</button>
       </div>
-      {/* Mobile filter chips */}
       <div style={{display:"flex",gap:6,marginBottom:12,overflowX:"auto",paddingBottom:4}}>
         {[["all","Todos"],["pendente","Pendente"],["pago","Pago"],["atrasado","Atrasado"]].map(([v,l])=><button key={v} style={chipStyle(filterPayment===v)} onClick={()=>{setFilterPayment(v);setPage(1)}}>{l}</button>)}
       </div>
-      {/* Mobile client cards */}
       {dataLoading?(
         [1,2,3,4,5].map(i=><div key={i} style={{height:80,borderRadius:10,marginBottom:8,background:"linear-gradient(90deg,#1c2236 25%,#252d42 50%,#1c2236 75%)",backgroundSize:"400% 100%",animation:"shimmer 1.4s ease infinite"}}/>)
       ):paginated.length===0?(
@@ -556,10 +705,7 @@ function ClientsView({clients,setClients,addToast,openClientModal,user,dataLoadi
           <div style={{flex:1,minWidth:0}}>
             <div style={{fontSize:13,fontWeight:600,color:"#e8eaf0",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{c.name}</div>
             <div style={{fontSize:11,color:"#5a6478",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{c.company||c.email}</div>
-            <div style={{display:"flex",gap:6,marginTop:4,alignItems:"center"}}>
-              <Badge colorKey={ps.badge} label={ps.label}/>
-              <Badge colorKey={prs.badge} label={prs.label}/>
-            </div>
+            <div style={{display:"flex",gap:6,marginTop:4,alignItems:"center"}}><Badge colorKey={ps.badge} label={ps.label}/><Badge colorKey={prs.badge} label={prs.label}/></div>
           </div>
           <div style={{textAlign:"right",flexShrink:0}}>
             <div style={{fontSize:13,fontWeight:700,color:"#22c97d",fontFamily:"monospace"}}>{formatCurrency(c.projectValue)}</div>
@@ -571,8 +717,6 @@ function ClientsView({clients,setClients,addToast,openClientModal,user,dataLoadi
         </div>
       })}
       <Pagination total={filtered.length} page={page} perPage={perPage} onPage={p=>{setPage(p);window.scrollTo(0,0)}} onPerPage={setPerPage}/>
-
-      {/* FORM MODAL */}
       <AnimatePresence>
         {showForm&&<div style={{position:"fixed",inset:0,background:"rgba(0,0,0,.7)",zIndex:1000,display:"flex",alignItems:"flex-end",backdropFilter:"blur(4px)"}} onClick={closeForm}>
           <motion.div initial={{y:"100%"}} animate={{y:0}} exit={{y:"100%"}} transition={{duration:.22}} onClick={e=>e.stopPropagation()} style={{background:"#111520",border:"1px solid rgba(255,255,255,.1)",borderRadius:"18px 18px 0 0",width:"100%",maxHeight:"92vh",overflowY:"auto",boxShadow:"0 -20px 60px rgba(0,0,0,.5)"}}>
@@ -601,7 +745,6 @@ function ClientsView({clients,setClients,addToast,openClientModal,user,dataLoadi
           </motion.div>
         </div>}
       </AnimatePresence>
-      {/* Confirm delete */}
       <AnimatePresence>
         {confirmId&&<div style={{position:"fixed",inset:0,background:"rgba(0,0,0,.7)",zIndex:1000,display:"flex",alignItems:"flex-end",backdropFilter:"blur(4px)"}} onClick={()=>setConfirmId(null)}>
           <motion.div initial={{y:"100%"}} animate={{y:0}} exit={{y:"100%"}} transition={{duration:.18}} onClick={e=>e.stopPropagation()} style={{background:"#111520",border:"1px solid rgba(255,255,255,.1)",borderRadius:"18px 18px 0 0",padding:24,width:"100%",textAlign:"center",boxShadow:"0 -20px 60px rgba(0,0,0,.5)"}}>
@@ -619,7 +762,6 @@ function ClientsView({clients,setClients,addToast,openClientModal,user,dataLoadi
     </div>
   )
 
-  // DESKTOP: table layout
   return (
     <div>
       <div style={{display:"flex",gap:10,marginBottom:14,flexWrap:"wrap"}}>
@@ -633,7 +775,7 @@ function ClientsView({clients,setClients,addToast,openClientModal,user,dataLoadi
       <div style={{display:"flex",gap:8,marginBottom:12,alignItems:"center",flexWrap:"wrap"}}>
         <div style={{display:"flex",alignItems:"center",gap:8,background:"#161b2a",border:"1px solid rgba(255,255,255,.08)",borderRadius:7,padding:"6px 10px",flex:1,minWidth:200}}>
           <Icon d="M21 21l-4.35-4.35M17 11A6 6 0 1 1 5 11a6 6 0 0 1 12 0z" size={13}/>
-          <input value={rawQuery} onChange={e=>{setRawQuery(e.target.value);setPage(1)}} placeholder="Buscar por nome, email, empresa, ID, telefone, valor, tag…" style={{background:"none",border:"none",outline:"none",fontSize:12,color:"#e8eaf0",fontFamily:"inherit",width:"100%"}}/>
+          <input value={rawQuery} onChange={e=>{setRawQuery(e.target.value);setPage(1)}} placeholder="Buscar por nome, email, empresa, ID…" style={{background:"none",border:"none",outline:"none",fontSize:12,color:"#e8eaf0",fontFamily:"inherit",width:"100%"}}/>
           {rawQuery&&<button onClick={()=>setRawQuery("")} style={{background:"none",border:"none",cursor:"pointer",color:"#5a6478",fontSize:16,lineHeight:1}}>×</button>}
         </div>
         <button onClick={()=>setShowAdvanced(v=>!v)} style={{padding:"7px 12px",borderRadius:7,fontSize:11,cursor:"pointer",fontFamily:"inherit",border:"1px solid rgba(255,255,255,.1)",background:showAdvanced?"rgba(79,110,247,.15)":"transparent",color:showAdvanced?"#4f6ef7":"#8892a4"}}>Filtros {showAdvanced?"▲":"▼"}</button>
@@ -644,15 +786,15 @@ function ClientsView({clients,setClients,addToast,openClientModal,user,dataLoadi
         {[["all","Todos"],["pendente","Pendente"],["pago","Pago"],["atrasado","Atrasado"]].map(([v,l])=><button key={v} style={chipStyle(filterPayment===v)} onClick={()=>{setFilterPayment(v);setPage(1)}}>{l}</button>)}
         <span style={{fontSize:10,color:"#5a6478",fontFamily:"monospace",marginLeft:8}}>PROJETO:</span>
         {[["all","Todos"],["andamento","Em andamento"],["concluido","Concluído"],["cancelado","Cancelado"]].map(([v,l])=><button key={v} style={chipStyle(filterProject===v)} onClick={()=>{setFilterProject(v);setPage(1)}}>{l}</button>)}
-        {hasFilters&&<button onClick={()=>{setRawQuery("");setFilterPayment("all");setFilterProject("all");setFilterOwner("all");setFilterTag("all");setValueMin("");setValueMax("");setPage(1)}} style={{...chipStyle(false),borderColor:"rgba(239,68,68,.3)",color:"#ef4444",marginLeft:8}}>✕ Limpar filtros</button>}
+        {hasFilters&&<button onClick={()=>{setRawQuery("");setFilterPayment("all");setFilterProject("all");setFilterOwner("all");setFilterTag("all");setValueMin("");setValueMax("");setPage(1)}} style={{...chipStyle(false),borderColor:"rgba(239,68,68,.3)",color:"#ef4444",marginLeft:8}}>✕ Limpar</button>}
       </div>
       <AnimatePresence>
         {showAdvanced&&<motion.div initial={{height:0,opacity:0}} animate={{height:"auto",opacity:1}} exit={{height:0,opacity:0}} transition={{duration:.18}} style={{overflow:"hidden",marginBottom:14}}>
           <div style={{background:"#111520",border:"1px solid rgba(255,255,255,.06)",borderRadius:10,padding:"14px 16px",display:"grid",gridTemplateColumns:"repeat(4,1fr)",gap:12}}>
             <div><div style={{fontSize:9,color:"#5a6478",fontFamily:"monospace",textTransform:"uppercase",letterSpacing:".5px",marginBottom:6}}>Responsável</div><select value={filterOwner} onChange={e=>{setFilterOwner(e.target.value);setPage(1)}} style={{...inputStyle,cursor:"pointer"}}><option value="all">Todos</option>{allOwners.map(o=><option key={o} value={o}>{o}</option>)}</select></div>
             <div><div style={{fontSize:9,color:"#5a6478",fontFamily:"monospace",textTransform:"uppercase",letterSpacing:".5px",marginBottom:6}}>Tag</div><select value={filterTag} onChange={e=>{setFilterTag(e.target.value);setPage(1)}} style={{...inputStyle,cursor:"pointer"}}><option value="all">Todas</option>{allTags.map(t=><option key={t} value={t}>{t}</option>)}</select></div>
-            <div><div style={{fontSize:9,color:"#5a6478",fontFamily:"monospace",textTransform:"uppercase",letterSpacing:".5px",marginBottom:6}}>Valor mínimo (R$)</div><input type="number" min="0" value={valueMin} onChange={e=>{setValueMin(e.target.value);setPage(1)}} placeholder="0" style={inputStyle}/></div>
-            <div><div style={{fontSize:9,color:"#5a6478",fontFamily:"monospace",textTransform:"uppercase",letterSpacing:".5px",marginBottom:6}}>Valor máximo (R$)</div><input type="number" min="0" value={valueMax} onChange={e=>{setValueMax(e.target.value);setPage(1)}} placeholder="∞" style={inputStyle}/></div>
+            <div><div style={{fontSize:9,color:"#5a6478",fontFamily:"monospace",textTransform:"uppercase",letterSpacing:".5px",marginBottom:6}}>Valor mín (R$)</div><input type="number" min="0" value={valueMin} onChange={e=>{setValueMin(e.target.value);setPage(1)}} placeholder="0" style={inputStyle}/></div>
+            <div><div style={{fontSize:9,color:"#5a6478",fontFamily:"monospace",textTransform:"uppercase",letterSpacing:".5px",marginBottom:6}}>Valor máx (R$)</div><input type="number" min="0" value={valueMax} onChange={e=>{setValueMax(e.target.value);setPage(1)}} placeholder="∞" style={inputStyle}/></div>
           </div>
         </motion.div>}
       </AnimatePresence>
@@ -809,7 +951,6 @@ function NotificationsView({user}) {
 function SettingsView({user,onLogout}) {
   const [toggles,setToggles]=useState({emailNotif:true,dealAlerts:true,weeklyReport:false,twoFactor:false,webhook:true})
   const [companyName,setCompanyName]=useState(user?.user_metadata?.company_name||"")
-  const [timezone,setTimezone]=useState("America/Sao_Paulo")
   const [editingCompany,setEditingCompany]=useState(false)
   const displayName=user?.user_metadata?.full_name||user?.email?.split("@")[0]||"Usuário"
 
@@ -909,7 +1050,6 @@ export default function App() {
     return ()=>window.removeEventListener("keydown",handleKey)
   },[])
 
-  // Close sidebar when tab changes on mobile
   useEffect(()=>{ if(isMobile) setSidebarOpen(false) },[activeTab])
 
   async function addActivity(clientId) {
@@ -946,7 +1086,6 @@ export default function App() {
   const meta=PAGE_META[activeTab]??{title:activeTab,sub:""}
   const displayName=user.user_metadata?.full_name||user.email?.split("@")[0]||"Admin"
 
-  // ── SIDEBAR CONTENT (shared between mobile drawer and desktop) ──
   const SidebarContent = () => (
     <>
       <div style={{padding:"0 20px 20px",borderBottom:"1px solid rgba(255,255,255,.06)",marginBottom:12}}>
@@ -989,7 +1128,6 @@ export default function App() {
       <AnimatePresence>{paletteOpen&&<CommandPalette open={paletteOpen} onClose={()=>setPaletteOpen(false)} clients={clients} setActiveTab={setActiveTab} openClientModal={openClientModal}/>}</AnimatePresence>
       <AnimatePresence>{detailClient&&<ClientDetailModal client={detailClient} onClose={()=>setDetailClient(null)} onEdit={openEditFromModal} onAddActivity={addActivity}/>}</AnimatePresence>
 
-      {/* MOBILE SIDEBAR DRAWER */}
       {isMobile&&(
         <AnimatePresence>
           {sidebarOpen&&<>
@@ -1001,16 +1139,13 @@ export default function App() {
         </AnimatePresence>
       )}
 
-      {/* DESKTOP SIDEBAR */}
       {!isMobile&&(
         <aside style={{width:220,minWidth:220,background:"#111520",borderRight:"1px solid rgba(255,255,255,.06)",display:"flex",flexDirection:"column",padding:"20px 0",height:"100vh",overflowY:"auto"}}>
           <SidebarContent/>
         </aside>
       )}
 
-      {/* MAIN */}
       <div style={{flex:1,display:"flex",flexDirection:"column",height:"100vh",overflow:"hidden",minWidth:0}}>
-        {/* TOPBAR */}
         <div style={{padding:isMobile?"10px 14px":"14px 24px",borderBottom:"1px solid rgba(255,255,255,.06)",display:"flex",alignItems:"center",gap:10,background:"#111520",flexShrink:0}}>
           {isMobile&&(
             <button onClick={()=>setSidebarOpen(true)} style={{width:36,height:36,borderRadius:8,background:"#161b2a",border:"1px solid rgba(255,255,255,.08)",color:"#8892a4",cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}>
@@ -1035,12 +1170,11 @@ export default function App() {
           )}
         </div>
 
-        {/* PAGE CONTENT */}
         <div style={{flex:1,overflowY:"auto",padding:isMobile?"12px 12px 80px":"24px"}}>
           <AnimatePresence mode="wait">
             <motion.div key={activeTab} variants={pageVariants} initial="initial" animate="animate" exit="exit">
               {activeTab==="dashboard"     && <DashboardView clients={clients} deals={deals}/>}
-              {activeTab==="pipeline"      && <PipelineView deals={deals} setDeals={setDeals} addToast={addToast}/>}
+              {activeTab==="pipeline"      && <PipelineView deals={deals} setDeals={setDeals} addToast={addToast} user={user}/>}
               {activeTab==="clients"       && <ClientsView clients={clients} setClients={setClients} addToast={addToast} openClientModal={openClientModal} user={user} dataLoading={dataLoading} onNotify={notify}/>}
               {activeTab==="kanban"        && <KanbanPage addToast={addToast}/>}
               {activeTab==="tasks"         && <TasksPage user={user} addToast={addToast}/>}
@@ -1052,12 +1186,11 @@ export default function App() {
           </AnimatePresence>
         </div>
 
-        {/* MOBILE BOTTOM NAV */}
         {isMobile&&(
           <nav style={{position:"fixed",bottom:0,left:0,right:0,background:"#111520",borderTop:"1px solid rgba(255,255,255,.08)",display:"flex",zIndex:200,paddingBottom:"env(safe-area-inset-bottom)"}}>
             {BOTTOM_NAV.map(({id,label,icon})=>{
               const active=activeTab===id
-              const badge=badgeCounts[id==="tasks"?"pendingTasks":id==="notifications"?"unreadNotifs":undefined]
+              const badge=id==="tasks"?badgeCounts.pendingTasks:id==="notifications"?badgeCounts.unreadNotifs:0
               return <button key={id} onClick={()=>setActiveTab(id)} style={{flex:1,display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",gap:3,padding:"8px 4px",border:"none",background:"none",cursor:"pointer",color:active?"#4f6ef7":"#5a6478",fontFamily:"inherit",position:"relative",minHeight:56}}>
                 <Icon d={icon} size={20}/>
                 <span style={{fontSize:9,fontWeight:active?600:400,letterSpacing:".3px"}}>{label}</span>
