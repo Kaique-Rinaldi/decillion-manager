@@ -10,9 +10,22 @@ import KanbanPage        from "./components/pages/KanbanPage"
 import TasksPage         from "./components/pages/TasksPage"
 
 import { fetchClients, createClient, updateClient, deleteClient } from "./services/clientsService"
-import { fetchDeals, createDeal, updateDeal, deleteDeal }          from "./services/dealsService"
+import { fetchDeals, updateDeal }                                  from "./services/dealsService"
 import { updateTask }                                              from "./services/tasksService"
 import { createNotification, fetchNotifications, markAllAsRead, markOneAsRead } from "./services/notificationService"
+
+// ═══════════════════════════════════════════════════════════════════
+// 0. RESPONSIVE HOOK
+// ═══════════════════════════════════════════════════════════════════
+function useIsMobile(breakpoint = 768) {
+  const [isMobile, setIsMobile] = useState(() => window.innerWidth < breakpoint)
+  useEffect(() => {
+    const handler = () => setIsMobile(window.innerWidth < breakpoint)
+    window.addEventListener("resize", handler)
+    return () => window.removeEventListener("resize", handler)
+  }, [breakpoint])
+  return isMobile
+}
 
 // ═══════════════════════════════════════════════════════════════════
 // 1. ENUMS
@@ -154,7 +167,7 @@ function StatCard({label,value,delta,deltaType="up",iconPath,iconColor}) {
     <div style={{background:"#111520",border:"1px solid rgba(255,255,255,.06)",borderRadius:12,padding:16}}>
       {iconPath&&<div style={{float:"right",width:32,height:32,borderRadius:8,background:ic+"20",display:"flex",alignItems:"center",justifyContent:"center"}}><Icon d={iconPath} size={15}/></div>}
       <div style={{fontSize:10,color:"#5a6478",textTransform:"uppercase",letterSpacing:".8px",fontFamily:"monospace",marginBottom:10}}>{label}</div>
-      <div style={{fontSize:26,fontWeight:500,color:"#e8eaf0",letterSpacing:-1}}>{value}</div>
+      <div style={{fontSize:22,fontWeight:500,color:"#e8eaf0",letterSpacing:-1}}>{value}</div>
       {delta&&<div style={{display:"inline-flex",alignItems:"center",gap:3,marginTop:8,fontSize:10,fontFamily:"monospace",padding:"2px 6px",borderRadius:4,background:deltaType==="up"?"rgba(34,201,125,.1)":"rgba(239,68,68,.1)",color:deltaType==="up"?"#22c97d":"#ef4444"}}>{deltaType==="up"?"↑":"↓"} {delta}</div>}
     </div>
   )
@@ -177,7 +190,7 @@ function Pagination({total,page,perPage,onPage,onPerPage}) {
   const pages=[]; for(let i=1;i<=totalPages;i++){if(i===1||i===totalPages||(i>=page-1&&i<=page+1))pages.push(i);else if(pages[pages.length-1]!=="…")pages.push("…")}
   const btn=(active)=>({minWidth:28,height:28,borderRadius:6,border:"1px solid",borderColor:active?"#4f6ef7":"rgba(255,255,255,.08)",background:active?"#4f6ef7":"transparent",color:active?"#fff":"#8892a4",fontSize:11,fontFamily:"monospace",cursor:active?"default":"pointer",display:"flex",alignItems:"center",justifyContent:"center",padding:"0 6px"})
   return (
-    <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",padding:"12px 16px",borderTop:"1px solid rgba(255,255,255,.05)"}}>
+    <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",padding:"12px 16px",borderTop:"1px solid rgba(255,255,255,.05)",flexWrap:"wrap",gap:8}}>
       <div style={{display:"flex",alignItems:"center",gap:6}}><span style={{fontSize:10,color:"#5a6478",fontFamily:"monospace"}}>Por página:</span>{[10,25,50].map(n=><button key={n} onClick={()=>{onPerPage(n);onPage(1)}} style={{...btn(perPage===n)}}>{n}</button>)}</div>
       <div style={{display:"flex",alignItems:"center",gap:4}}><button onClick={()=>onPage(page-1)} disabled={page===1} style={{...btn(false),opacity:page===1?.3:1}}>‹</button>{pages.map((p,i)=>p==="…"?<span key={i} style={{color:"#5a6478",fontSize:11,padding:"0 2px"}}>…</span>:<button key={p} onClick={()=>onPage(p)} style={{...btn(page===p)}}>{p}</button>)}<button onClick={()=>onPage(page+1)} disabled={page===totalPages} style={{...btn(false),opacity:page===totalPages?.3:1}}>›</button></div>
       <span style={{fontSize:10,color:"#5a6478",fontFamily:"monospace"}}>{total} resultado{total!==1?"s":""}</span>
@@ -216,28 +229,25 @@ function CommandPalette({open,onClose,clients,setActiveTab,openClientModal}) {
   },[dq,clients])
   if(!open) return null
   return (
-    <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,.65)",zIndex:2000,display:"flex",alignItems:"flex-start",justifyContent:"center",paddingTop:120,backdropFilter:"blur(6px)"}} onClick={onClose}>
+    <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,.65)",zIndex:2000,display:"flex",alignItems:"flex-start",justifyContent:"center",paddingTop:80,backdropFilter:"blur(6px)",padding:"80px 16px 0"}} onClick={onClose}>
       <motion.div initial={{scale:.96,opacity:0,y:-8}} animate={{scale:1,opacity:1,y:0}} exit={{scale:.96,opacity:0}} transition={{duration:.15}} onClick={e=>e.stopPropagation()} style={{background:"#111520",border:"1px solid rgba(255,255,255,.12)",borderRadius:16,width:"100%",maxWidth:560,boxShadow:"0 24px 80px rgba(0,0,0,.6)",overflow:"hidden"}}>
         <div style={{display:"flex",alignItems:"center",gap:10,padding:"14px 16px",borderBottom:"1px solid rgba(255,255,255,.07)"}}>
           <Icon d="M21 21l-4.35-4.35M17 11A6 6 0 1 1 5 11a6 6 0 0 1 12 0z" size={16}/>
           <input ref={inputRef} value={query} onChange={e=>setQuery(e.target.value)} placeholder="Buscar clientes, ações, páginas…" style={{flex:1,background:"none",border:"none",outline:"none",fontSize:14,color:"#e8eaf0",fontFamily:"inherit"}}/>
           <span style={{fontSize:9,fontFamily:"monospace",color:"#5a6478",border:"1px solid rgba(255,255,255,.1)",padding:"2px 6px",borderRadius:4}}>ESC</span>
         </div>
-        <div style={{maxHeight:380,overflowY:"auto"}}>
+        <div style={{maxHeight:360,overflowY:"auto"}}>
           {results.length===0?<div style={{padding:"32px 16px",textAlign:"center",color:"#5a6478",fontSize:13}}>Nenhum resultado</div>:results.map(group=>(
             <div key={group.group}>
               <div style={{padding:"10px 16px 4px",fontSize:9,color:"#5a6478",fontFamily:"monospace",textTransform:"uppercase",letterSpacing:".6px"}}>{group.group}</div>
               {group.items.map((item,i)=>(
-                <div key={i} onClick={item.action} style={{display:"flex",alignItems:"center",gap:10,padding:"10px 16px",cursor:"pointer",transition:"background .1s"}} onMouseEnter={e=>e.currentTarget.style.background="#161b2a"} onMouseLeave={e=>e.currentTarget.style.background="transparent"}>
-                  <div style={{width:28,height:28,borderRadius:7,flexShrink:0,background:item.isClient?avatarColor(item.label).bg:"rgba(79,110,247,.1)",color:item.isClient?avatarColor(item.label).fg:"#4f6ef7",display:"flex",alignItems:"center",justifyContent:"center",fontSize:item.isClient?9:13,fontWeight:700}}>{item.icon}</div>
+                <div key={i} onClick={item.action} style={{display:"flex",alignItems:"center",gap:10,padding:"12px 16px",cursor:"pointer",transition:"background .1s"}} onMouseEnter={e=>e.currentTarget.style.background="#161b2a"} onMouseLeave={e=>e.currentTarget.style.background="transparent"}>
+                  <div style={{width:32,height:32,borderRadius:7,flexShrink:0,background:item.isClient?avatarColor(item.label).bg:"rgba(79,110,247,.1)",color:item.isClient?avatarColor(item.label).fg:"#4f6ef7",display:"flex",alignItems:"center",justifyContent:"center",fontSize:item.isClient?9:13,fontWeight:700}}>{item.icon}</div>
                   <div><div style={{fontSize:13,color:"#e8eaf0"}}>{item.label}</div>{item.sub&&<div style={{fontSize:10,color:"#5a6478"}}>{item.sub}</div>}</div>
                 </div>
               ))}
             </div>
           ))}
-        </div>
-        <div style={{padding:"8px 16px",borderTop:"1px solid rgba(255,255,255,.05)",display:"flex",gap:12}}>
-          {[["↵","selecionar"],["↑↓","navegar"],["ESC","fechar"]].map(([k,l])=><span key={k} style={{fontSize:9,color:"#5a6478",fontFamily:"monospace"}}><span style={{background:"#1c2236",padding:"1px 5px",borderRadius:3,marginRight:4,border:"1px solid rgba(255,255,255,.07)"}}>{k}</span>{l}</span>)}
         </div>
       </motion.div>
     </div>
@@ -248,6 +258,7 @@ function CommandPalette({open,onClose,clients,setActiveTab,openClientModal}) {
 // 6. CLIENT DETAIL MODAL
 // ═══════════════════════════════════════════════════════════════════
 function ClientDetailModal({client,onClose,onEdit,onAddActivity}) {
+  const isMobile = useIsMobile()
   const [tab,setTab]=useState("overview")
   const [newNote,setNewNote]=useState(client.notes||"")
   const [editingNote,setEditingNote]=useState(false)
@@ -256,32 +267,44 @@ function ClientDetailModal({client,onClose,onEdit,onAddActivity}) {
   const pal=avatarColor(client.name)
   const TABS=["overview","timeline","pagamentos","notas"]
   return (
-    <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,.65)",zIndex:1500,display:"flex",alignItems:"center",justifyContent:"center",padding:20,backdropFilter:"blur(5px)"}} onClick={onClose}>
-      <motion.div initial={{scale:.94,opacity:0,y:12}} animate={{scale:1,opacity:1,y:0}} exit={{scale:.94,opacity:0}} transition={{duration:.18}} onClick={e=>e.stopPropagation()} style={{background:"#111520",border:"1px solid rgba(255,255,255,.1)",borderRadius:18,width:"100%",maxWidth:700,maxHeight:"88vh",display:"flex",flexDirection:"column",boxShadow:"0 28px 80px rgba(0,0,0,.6)",overflow:"hidden"}}>
-        <div style={{padding:"20px 24px",borderBottom:"1px solid rgba(255,255,255,.07)",display:"flex",alignItems:"center",gap:14,flexShrink:0}}>
-          <div style={{width:44,height:44,borderRadius:11,background:pal.bg,color:pal.fg,display:"flex",alignItems:"center",justifyContent:"center",fontSize:14,fontWeight:700,flexShrink:0}}>{initials(client.name)}</div>
-          <div style={{flex:1,minWidth:0}}><div style={{fontSize:16,fontWeight:600,color:"#e8eaf0"}}>{client.name}</div><div style={{fontSize:11,color:"#5a6478",marginTop:1}}>{client.company} · {client.email}</div></div>
-          <div style={{display:"flex",gap:6,alignItems:"center"}}>
-            <Badge colorKey={ps.badge} label={ps.label}/><Badge colorKey={prs.badge} label={prs.label}/>
-            <button onClick={()=>onEdit(client)} style={{marginLeft:8,padding:"5px 12px",borderRadius:7,fontSize:11,background:"rgba(79,110,247,.1)",border:"1px solid rgba(79,110,247,.2)",color:"#4f6ef7",cursor:"pointer",fontFamily:"inherit"}}>Editar</button>
-            <button onClick={onClose} style={{width:28,height:28,borderRadius:7,background:"rgba(255,255,255,.05)",border:"1px solid rgba(255,255,255,.1)",color:"#8892a4",cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",fontSize:16}}>×</button>
+    <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,.65)",zIndex:1500,display:"flex",alignItems:isMobile?"flex-end":"center",justifyContent:"center",padding:isMobile?0:20,backdropFilter:"blur(5px)"}} onClick={onClose}>
+      <motion.div
+        initial={isMobile?{y:"100%"}:{scale:.94,opacity:0,y:12}}
+        animate={isMobile?{y:0}:{scale:1,opacity:1,y:0}}
+        exit={isMobile?{y:"100%"}:{scale:.94,opacity:0}}
+        transition={{duration:.2}}
+        onClick={e=>e.stopPropagation()}
+        style={{background:"#111520",border:"1px solid rgba(255,255,255,.1)",borderRadius:isMobile?"18px 18px 0 0":18,width:"100%",maxWidth:isMobile?"100%":700,maxHeight:isMobile?"92vh":"88vh",display:"flex",flexDirection:"column",boxShadow:"0 28px 80px rgba(0,0,0,.6)",overflow:"hidden"}}
+      >
+        {/* drag handle on mobile */}
+        {isMobile&&<div style={{display:"flex",justifyContent:"center",padding:"10px 0 4px"}}><div style={{width:36,height:4,borderRadius:4,background:"rgba(255,255,255,.15)"}}/></div>}
+        <div style={{padding:isMobile?"12px 16px":"20px 24px",borderBottom:"1px solid rgba(255,255,255,.07)",display:"flex",alignItems:"center",gap:12,flexShrink:0}}>
+          <div style={{width:40,height:40,borderRadius:10,background:pal.bg,color:pal.fg,display:"flex",alignItems:"center",justifyContent:"center",fontSize:13,fontWeight:700,flexShrink:0}}>{initials(client.name)}</div>
+          <div style={{flex:1,minWidth:0}}>
+            <div style={{fontSize:isMobile?14:16,fontWeight:600,color:"#e8eaf0",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{client.name}</div>
+            <div style={{fontSize:11,color:"#5a6478",marginTop:1,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{client.company||client.email}</div>
+          </div>
+          <div style={{display:"flex",gap:6,alignItems:"center",flexShrink:0}}>
+            {!isMobile&&<><Badge colorKey={ps.badge} label={ps.label}/><Badge colorKey={prs.badge} label={prs.label}/></>}
+            <button onClick={()=>onEdit(client)} style={{padding:"5px 10px",borderRadius:7,fontSize:11,background:"rgba(79,110,247,.1)",border:"1px solid rgba(79,110,247,.2)",color:"#4f6ef7",cursor:"pointer",fontFamily:"inherit"}}>Editar</button>
+            <button onClick={onClose} style={{width:32,height:32,borderRadius:7,background:"rgba(255,255,255,.05)",border:"1px solid rgba(255,255,255,.1)",color:"#8892a4",cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",fontSize:18}}>×</button>
           </div>
         </div>
-        <div style={{display:"flex",gap:0,padding:"0 24px",borderBottom:"1px solid rgba(255,255,255,.06)",flexShrink:0}}>
-          {TABS.map(t=><button key={t} onClick={()=>setTab(t)} style={{padding:"10px 14px",fontSize:12,border:"none",background:"none",cursor:"pointer",fontFamily:"inherit",textTransform:"capitalize",color:tab===t?"#e8eaf0":"#5a6478",borderBottom:tab===t?"2px solid #4f6ef7":"2px solid transparent",transition:"all .13s"}}>{t}</button>)}
+        <div style={{display:"flex",gap:0,padding:"0 16px",borderBottom:"1px solid rgba(255,255,255,.06)",flexShrink:0,overflowX:"auto"}}>
+          {TABS.map(t=><button key={t} onClick={()=>setTab(t)} style={{padding:"10px 12px",fontSize:12,border:"none",background:"none",cursor:"pointer",fontFamily:"inherit",textTransform:"capitalize",color:tab===t?"#e8eaf0":"#5a6478",borderBottom:tab===t?"2px solid #4f6ef7":"2px solid transparent",transition:"all .13s",whiteSpace:"nowrap"}}>{t}</button>)}
         </div>
-        <div style={{flex:1,overflowY:"auto",padding:24}}>
+        <div style={{flex:1,overflowY:"auto",padding:isMobile?16:24}}>
           {tab==="overview"&&(
             <div>
-              <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10,marginBottom:20}}>
+              <div style={{display:"grid",gridTemplateColumns:isMobile?"1fr 1fr":"1fr 1fr",gap:10,marginBottom:16}}>
                 {[{l:"Valor do projeto",v:formatCurrency(client.projectValue),c:"#22c97d"},{l:"Telefone",v:client.phone||"—",c:"#e8eaf0"},{l:"Início",v:formatDate(client.startDate),c:"#e8eaf0"},{l:"Entrega",v:formatDate(client.endDate),c:"#e8eaf0"},{l:"Responsável",v:client.projectOwner||"—",c:"#e8eaf0"},{l:"ID",v:client.id,c:"#5a6478"}].map(f=>(
-                  <div key={f.l} style={{background:"#161b2a",borderRadius:9,padding:"10px 14px",border:"1px solid rgba(255,255,255,.06)"}}>
+                  <div key={f.l} style={{background:"#161b2a",borderRadius:9,padding:"10px 12px",border:"1px solid rgba(255,255,255,.06)"}}>
                     <div style={{fontSize:9,color:"#5a6478",fontFamily:"monospace",textTransform:"uppercase",letterSpacing:".5px",marginBottom:5}}>{f.l}</div>
-                    <div style={{fontSize:f.l==="ID"?10:13,fontWeight:500,color:f.c,fontFamily:f.l==="ID"?"monospace":"inherit"}}>{f.v}</div>
+                    <div style={{fontSize:f.l==="ID"?9:12,fontWeight:500,color:f.c,fontFamily:f.l==="ID"?"monospace":"inherit",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{f.v}</div>
                   </div>
                 ))}
               </div>
-              <div style={{background:"#161b2a",borderRadius:9,padding:"12px 14px",border:"1px solid rgba(255,255,255,.06)",marginBottom:16}}>
+              <div style={{background:"#161b2a",borderRadius:9,padding:"12px 14px",border:"1px solid rgba(255,255,255,.06)",marginBottom:12}}>
                 <div style={{display:"flex",justifyContent:"space-between",marginBottom:8}}><span style={{fontSize:11,color:"#8892a4"}}>{client.projectName}</span><span style={{fontSize:11,fontFamily:"monospace",color:"#5a6478"}}>{client.projectProgress}%</span></div>
                 <div style={{height:6,background:"#1c2236",borderRadius:4,overflow:"hidden"}}><div style={{height:"100%",borderRadius:4,width:`${client.projectProgress}%`,background:progressBarColor(client.projectStatus),transition:"width .4s"}}/></div>
               </div>
@@ -290,17 +313,17 @@ function ClientDetailModal({client,onClose,onEdit,onAddActivity}) {
           )}
           {tab==="timeline"&&(
             <div>
-              <button onClick={()=>onAddActivity(client.id)} style={{marginBottom:16,padding:"6px 14px",borderRadius:7,fontSize:11,background:"rgba(79,110,247,.1)",border:"1px solid rgba(79,110,247,.2)",color:"#4f6ef7",cursor:"pointer",fontFamily:"inherit"}}>+ Registrar atividade</button>
+              <button onClick={()=>onAddActivity(client.id)} style={{marginBottom:16,padding:"8px 14px",borderRadius:7,fontSize:12,background:"rgba(79,110,247,.1)",border:"1px solid rgba(79,110,247,.2)",color:"#4f6ef7",cursor:"pointer",fontFamily:"inherit",width:"100%"}}>+ Registrar atividade</button>
               {(client.activities||[]).length===0?<div style={{color:"#5a6478",fontSize:13,textAlign:"center",padding:"32px 0"}}>Nenhuma atividade</div>:[...(client.activities)].reverse().map((act,i,arr)=>{
                 const meta=ACTIVITY_ICON[act.type]??ACTIVITY_ICON.note
-                return <div key={act.id} style={{display:"flex",gap:12,paddingBottom:16,borderLeft:i<arr.length-1?"1px solid rgba(255,255,255,.07)":"none",marginLeft:14,paddingLeft:20,position:"relative"}}><div style={{position:"absolute",left:-10,top:0,width:20,height:20,borderRadius:"50%",background:meta.color+"22",color:meta.color,display:"flex",alignItems:"center",justifyContent:"center",fontSize:10,border:`1px solid ${meta.color}44`,flexShrink:0}}>{meta.icon}</div><div style={{flex:1}}><div style={{fontSize:12,color:"#e8eaf0"}}>{act.text}</div><div style={{fontSize:10,color:"#5a6478",marginTop:3,fontFamily:"monospace"}}>{act.user} · {relativeTime(act.date)} · {formatDate(act.date)}</div></div></div>
+                return <div key={act.id} style={{display:"flex",gap:12,paddingBottom:16,borderLeft:i<arr.length-1?"1px solid rgba(255,255,255,.07)":"none",marginLeft:14,paddingLeft:20,position:"relative"}}><div style={{position:"absolute",left:-10,top:0,width:20,height:20,borderRadius:"50%",background:meta.color+"22",color:meta.color,display:"flex",alignItems:"center",justifyContent:"center",fontSize:10,border:`1px solid ${meta.color}44`,flexShrink:0}}>{meta.icon}</div><div style={{flex:1}}><div style={{fontSize:12,color:"#e8eaf0"}}>{act.text}</div><div style={{fontSize:10,color:"#5a6478",marginTop:3,fontFamily:"monospace"}}>{act.user} · {relativeTime(act.date)}</div></div></div>
               })}
             </div>
           )}
           {tab==="pagamentos"&&(
             <div>
               <div style={{background:"#161b2a",borderRadius:9,padding:"16px",border:"1px solid rgba(255,255,255,.06)",display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:16}}>
-                <div><div style={{fontSize:9,color:"#5a6478",fontFamily:"monospace",textTransform:"uppercase",letterSpacing:".6px",marginBottom:6}}>Valor total</div><div style={{fontSize:24,fontWeight:600,color:"#22c97d",fontFamily:"monospace"}}>{formatCurrency(client.projectValue)}</div></div>
+                <div><div style={{fontSize:9,color:"#5a6478",fontFamily:"monospace",textTransform:"uppercase",letterSpacing:".6px",marginBottom:6}}>Valor total</div><div style={{fontSize:22,fontWeight:600,color:"#22c97d",fontFamily:"monospace"}}>{formatCurrency(client.projectValue)}</div></div>
                 <Badge colorKey={ps.badge} label={ps.label}/>
               </div>
               <div style={{background:"#161b2a",borderRadius:9,padding:"14px",border:"1px solid rgba(255,255,255,.06)"}}>
@@ -314,9 +337,9 @@ function ClientDetailModal({client,onClose,onEdit,onAddActivity}) {
             <div>
               <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:12}}>
                 <span style={{fontSize:11,color:"#5a6478"}}>Observações internas</span>
-                <button onClick={()=>setEditingNote(!editingNote)} style={{padding:"4px 10px",borderRadius:6,fontSize:10,cursor:"pointer",fontFamily:"inherit",background:"rgba(79,110,247,.1)",border:"1px solid rgba(79,110,247,.2)",color:"#4f6ef7"}}>{editingNote?"Salvar":"Editar"}</button>
+                <button onClick={()=>setEditingNote(!editingNote)} style={{padding:"6px 12px",borderRadius:6,fontSize:11,cursor:"pointer",fontFamily:"inherit",background:"rgba(79,110,247,.1)",border:"1px solid rgba(79,110,247,.2)",color:"#4f6ef7"}}>{editingNote?"Salvar":"Editar"}</button>
               </div>
-              {editingNote?<textarea value={newNote} onChange={e=>setNewNote(e.target.value)} style={{width:"100%",minHeight:160,background:"#161b2a",border:"1px solid rgba(79,110,247,.3)",borderRadius:9,padding:"12px 14px",fontSize:13,color:"#e8eaf0",fontFamily:"inherit",outline:"none",resize:"vertical",lineHeight:1.6,boxSizing:"border-box"}}/>:<div style={{background:"#161b2a",borderRadius:9,padding:"12px 14px",border:"1px solid rgba(255,255,255,.06)",minHeight:100,fontSize:13,color:newNote?"#8892a4":"#3a4255",lineHeight:1.6}}>{newNote||"Nenhuma observação. Clique em Editar para adicionar."}</div>}
+              {editingNote?<textarea value={newNote} onChange={e=>setNewNote(e.target.value)} style={{width:"100%",minHeight:140,background:"#161b2a",border:"1px solid rgba(79,110,247,.3)",borderRadius:9,padding:"12px 14px",fontSize:13,color:"#e8eaf0",fontFamily:"inherit",outline:"none",resize:"vertical",lineHeight:1.6,boxSizing:"border-box"}}/>:<div style={{background:"#161b2a",borderRadius:9,padding:"12px 14px",border:"1px solid rgba(255,255,255,.06)",minHeight:100,fontSize:13,color:newNote?"#8892a4":"#3a4255",lineHeight:1.6}}>{newNote||"Nenhuma observação. Clique em Editar para adicionar."}</div>}
             </div>
           )}
         </div>
@@ -329,6 +352,7 @@ function ClientDetailModal({client,onClose,onEdit,onAddActivity}) {
 // 7. VIEWS
 // ═══════════════════════════════════════════════════════════════════
 function DashboardView({clients,deals}) {
+  const isMobile = useIsMobile()
   const activeClients=clients.filter(c=>c.projectStatus==="andamento").length
   const totalRevenue=clients.reduce((s,c)=>s+(c.paymentStatus==="pago"?c.projectValue:0),0)
   const openDeals=deals.filter(d=>d.stage!=="fechado").length
@@ -341,214 +365,80 @@ function DashboardView({clients,deals}) {
   const recent=[...clients].sort((a,b)=>(b.createdAt||"").localeCompare(a.createdAt||"")).slice(0,5)
   return (
     <div>
-      <div style={{display:"grid",gridTemplateColumns:"repeat(4,1fr)",gap:12,marginBottom:20}}>
-        <StatCard label="Clientes em andamento" value={activeClients} delta={`de ${clients.length} total`} iconPath="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2M9 11a4 4 0 1 0 0-8 4 4 0 0 0 0 8z" iconColor="blue"/>
-        <StatCard label="Receita recebida" value={formatCurrency(totalRevenue)} delta="pagamentos confirmados" iconPath="M12 2a10 10 0 1 0 0 20A10 10 0 0 0 12 2zM12 6v6l4 2" iconColor="green"/>
-        <StatCard label="Negociações em aberto" value={openDeals} delta={`${wonDeals.length} fechadas`} iconPath="M4 6h16M4 12h16M4 18h16" iconColor="amber"/>
-        <StatCard label="Taxa de conversão" value={`${convRate}%`} delta="negociações ganhas / total" iconPath="M18 20V10M12 20V4M6 20v-6" iconColor="purple"/>
+      <div style={{display:"grid",gridTemplateColumns:isMobile?"1fr 1fr":"repeat(4,1fr)",gap:10,marginBottom:16}}>
+        <StatCard label="Em andamento" value={activeClients} delta={`de ${clients.length} total`} iconPath="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2M9 11a4 4 0 1 0 0-8 4 4 0 0 0 0 8z" iconColor="blue"/>
+        <StatCard label="Receita recebida" value={formatCurrency(totalRevenue)} iconPath="M12 2a10 10 0 1 0 0 20A10 10 0 0 0 12 2zM12 6v6l4 2" iconColor="green"/>
+        <StatCard label="Em negociação" value={openDeals} delta={`${wonDeals.length} fechadas`} iconPath="M4 6h16M4 12h16M4 18h16" iconColor="amber"/>
+        <StatCard label="Conversão" value={`${convRate}%`} iconPath="M18 20V10M12 20V4M6 20v-6" iconColor="purple"/>
       </div>
-      <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:12,marginBottom:20}}>
+      <div style={{display:"grid",gridTemplateColumns:isMobile?"1fr":"1fr 1fr",gap:12,marginBottom:16}}>
         <Card title="Receita (últimos 6 meses)">
           <div style={{display:"flex",alignItems:"flex-end",gap:5,height:80}}>
             {REVENUE_DATA.map((r,i)=><div key={i} style={{flex:1,display:"flex",flexDirection:"column",alignItems:"center"}}><div style={{width:"100%",borderRadius:"4px 4px 0 0",height:`${(r.value/maxR)*100}%`,background:i===REVENUE_DATA.length-1?"#4f6ef7":"#1c2236"}}/><div style={{fontSize:8,color:"#5a6478",fontFamily:"monospace",marginTop:4}}>{r.month}</div></div>)}
           </div>
         </Card>
         <Card title="Pipeline por etapa" sub="Negociações ativas">
-          {stageCounts.map((s,i)=><div key={i} style={{display:"flex",alignItems:"center",gap:8,marginBottom:8}}><div style={{fontSize:10,color:"#8892a4",width:76,fontFamily:"monospace",whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{s.n}</div><div style={{flex:1,background:"#1c2236",borderRadius:4,height:8,overflow:"hidden"}}><div style={{background:s.color,height:"100%",width:`${(s.c/maxSC)*100}%`,borderRadius:4,transition:"width .4s"}}/></div><div style={{fontSize:10,color:"#5a6478",fontFamily:"monospace",width:14,textAlign:"right"}}>{s.c}</div></div>)}
+          {stageCounts.map((s,i)=><div key={i} style={{display:"flex",alignItems:"center",gap:8,marginBottom:8}}><div style={{fontSize:10,color:"#8892a4",width:70,fontFamily:"monospace",whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{s.n}</div><div style={{flex:1,background:"#1c2236",borderRadius:4,height:8,overflow:"hidden"}}><div style={{background:s.color,height:"100%",width:`${(s.c/maxSC)*100}%`,borderRadius:4,transition:"width .4s"}}/></div><div style={{fontSize:10,color:"#5a6478",fontFamily:"monospace",width:14,textAlign:"right"}}>{s.c}</div></div>)}
         </Card>
       </div>
-      <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:12}}>
+      <div style={{display:"grid",gridTemplateColumns:isMobile?"1fr":"1fr 1fr",gap:12}}>
         <Card title="Clientes recentes">
           {recent.length===0?<div style={{textAlign:"center",color:"#5a6478",padding:"24px 0",fontSize:12}}>Nenhum cliente ainda</div>:recent.map((c,i)=>{
             const pal=avatarColor(c.name); const ps=PAYMENT_STATUS[c.paymentStatus]??PAYMENT_STATUS.pendente
-            return <div key={c.id} style={{display:"flex",alignItems:"center",gap:10,padding:"9px 0",borderBottom:i<recent.length-1?"1px solid rgba(255,255,255,.05)":"none"}}><div style={{width:28,height:28,borderRadius:7,background:pal.bg,color:pal.fg,display:"flex",alignItems:"center",justifyContent:"center",fontSize:9,fontWeight:700,flexShrink:0}}>{initials(c.name)}</div><div style={{flex:1,minWidth:0}}><div style={{fontSize:12,fontWeight:500,color:"#e8eaf0",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{c.name}</div><div style={{fontSize:10,color:"#5a6478"}}>{c.company||c.email}</div></div><div style={{textAlign:"right",flexShrink:0}}><div style={{fontSize:12,fontWeight:600,color:"#22c97d",fontFamily:"monospace"}}>{formatCurrency(c.projectValue)}</div><Badge colorKey={ps.badge} label={ps.label}/></div></div>
+            return <div key={c.id} style={{display:"flex",alignItems:"center",gap:10,padding:"9px 0",borderBottom:i<recent.length-1?"1px solid rgba(255,255,255,.05)":"none"}}><div style={{width:28,height:28,borderRadius:7,background:pal.bg,color:pal.fg,display:"flex",alignItems:"center",justifyContent:"center",fontSize:9,fontWeight:700,flexShrink:0}}>{initials(c.name)}</div><div style={{flex:1,minWidth:0}}><div style={{fontSize:12,fontWeight:500,color:"#e8eaf0",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{c.name}</div><div style={{fontSize:10,color:"#5a6478",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{c.company||c.email}</div></div><div style={{textAlign:"right",flexShrink:0}}><div style={{fontSize:12,fontWeight:600,color:"#22c97d",fontFamily:"monospace"}}>{formatCurrency(c.projectValue)}</div><Badge colorKey={ps.badge} label={ps.label}/></div></div>
           })}
         </Card>
-        <Card title="Top negociações por valor">
+        {!isMobile&&<Card title="Top negociações por valor">
           <table style={{width:"100%",borderCollapse:"collapse"}}>
             <thead><tr>{["Negociação","Etapa","Valor"].map(h=><th key={h} style={{textAlign:h==="Valor"?"right":"left",padding:"6px 0",fontSize:9,color:"#5a6478",fontFamily:"monospace",textTransform:"uppercase",letterSpacing:".5px",borderBottom:"1px solid rgba(255,255,255,.05)"}}>{h}</th>)}</tr></thead>
             <tbody>{[...deals].sort((a,b)=>b.value-a.value).slice(0,5).map(d=>{const st=PIPELINE_STAGE[d.stage]??PIPELINE_STAGE.lead;return <tr key={d.id} style={{borderBottom:"1px solid rgba(255,255,255,.03)"}}><td style={{padding:"7px 0",fontSize:12,color:"#e8eaf0",fontWeight:500}}>{d.name}</td><td style={{padding:"7px 0"}}><span style={{fontSize:9,fontFamily:"monospace",color:st.color}}>{st.label}</span></td><td style={{padding:"7px 0",fontSize:12,color:"#22c97d",fontFamily:"monospace",textAlign:"right"}}>{formatCurrency(d.value)}</td></tr>})}</tbody>
           </table>
-        </Card>
+        </Card>}
       </div>
     </div>
   )
 }
 
-function PipelineView({deals,setDeals,addToast,user}) {
-  const [draggingId,setDraggingId]=useState(null)
-  const [overStage,setOverStage]=useState(null)
-  const [showForm,setShowForm]=useState(false)
-  const [saving,setSaving]=useState(false)
-  const [confirmId,setConfirmId]=useState(null)
-  const [form,setForm]=useState({name:"",company:"",value:"",stage:"lead"})
-  const [formErrors,setFormErrors]=useState({})
-
+function PipelineView({deals,setDeals,addToast}) {
+  const isMobile = useIsMobile()
+  const [draggingId,setDraggingId]=useState(null); const [overStage,setOverStage]=useState(null)
   const totalValue=deals.reduce((s,d)=>s+d.value,0)
   const openDeals=deals.filter(d=>d.stage!=="fechado")
   const avgTicket=openDeals.length>0?openDeals.reduce((s,d)=>s+d.value,0)/openDeals.length:0
-
   async function onDrop(targetStage) {
     setOverStage(null); if(!draggingId) return
     const deal=deals.find(d=>d.id===draggingId)
     if(!deal||deal.stage===targetStage){setDraggingId(null);return}
     const allowed=ALLOWED_TRANSITIONS[deal.stage]??[]
-    if(!allowed.includes(targetStage)){addToast(`Transição "${PIPELINE_STAGE[deal.stage].label}" → "${PIPELINE_STAGE[targetStage].label}" não permitida.`,"error");setDraggingId(null);return}
+    if(!allowed.includes(targetStage)){addToast(`Transição não permitida.`,"error");setDraggingId(null);return}
     const closedAt=targetStage==="fechado"?new Date().toISOString().split("T")[0]:null
     setDeals(prev=>prev.map(d=>d.id===draggingId?{...d,stage:targetStage,closedAt}:d))
-    try{await updateDeal(draggingId,{stage:targetStage,closedAt});addToast(`Negociação movida para "${PIPELINE_STAGE[targetStage].label}"`,"success")}
+    try{await updateDeal(draggingId,{stage:targetStage,closedAt});addToast(`Movido para "${PIPELINE_STAGE[targetStage].label}"`,"success")}
     catch{setDeals(prev=>prev.map(d=>d.id===draggingId?{...d,stage:deal.stage,closedAt:deal.closedAt}:d));addToast("Erro ao mover negociação.","error")}
     setDraggingId(null)
   }
-
-  function validateForm(f) {
-    const e={}
-    if(!f.name?.trim())    e.name="Nome obrigatório"
-    if(!f.value||Number(f.value)<=0) e.value="Valor deve ser > 0"
-    if(!f.stage)           e.stage="Selecione uma etapa"
-    return e
-  }
-
-  async function handleCreate(e) {
-    e.preventDefault()
-    const errs=validateForm(form); if(Object.keys(errs).length){setFormErrors(errs);return}
-    setSaving(true)
-    try {
-      const newDeal=await createDeal(user.id,{name:form.name.trim(),company:form.company.trim(),value:Number(form.value),stage:form.stage})
-      setDeals(prev=>[newDeal,...prev])
-      addToast("Negociação criada!","success")
-      setShowForm(false)
-      setForm({name:"",company:"",value:"",stage:"lead"})
-      setFormErrors({})
-    } catch(err){addToast(`Erro: ${err.message}`,"error")}
-    finally{setSaving(false)}
-  }
-
-  async function handleDelete(id) {
-    try{await deleteDeal(id);setDeals(prev=>prev.filter(d=>d.id!==id));addToast("Negociação removida.","warning")}
-    catch(err){addToast(`Erro: ${err.message}`,"error")}
-    setConfirmId(null)
-  }
-
-  const inputStyle={background:"#161b2a",border:"1px solid rgba(255,255,255,.15)",borderRadius:7,padding:"7px 10px",fontSize:12,color:"#e8eaf0",fontFamily:"inherit",outline:"none",width:"100%",boxSizing:"border-box"}
-
   return (
     <div>
-      {/* Header com botão */}
-      <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:16}}>
-        <div style={{fontSize:12,color:"#5a6478",fontFamily:"monospace"}}>{openDeals.length} negociação{openDeals.length!==1?"s":""} em aberto</div>
-        <button onClick={()=>setShowForm(true)} style={{display:"flex",alignItems:"center",gap:6,padding:"7px 14px",borderRadius:7,background:"#4f6ef7",border:"none",color:"#fff",fontSize:12,fontWeight:500,cursor:"pointer",fontFamily:"inherit"}}>
-          + Nova negociação
-        </button>
-      </div>
-
-      {/* Modal de criação */}
-      <AnimatePresence>
-        {showForm&&(
-          <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,.6)",zIndex:1000,display:"flex",alignItems:"center",justifyContent:"center",padding:20,backdropFilter:"blur(4px)"}} onClick={()=>setShowForm(false)}>
-            <motion.div initial={{scale:.93,opacity:0,y:10}} animate={{scale:1,opacity:1,y:0}} exit={{scale:.93,opacity:0}} transition={{duration:.18}} onClick={e=>e.stopPropagation()} style={{background:"#111520",border:"1px solid rgba(255,255,255,.1)",borderRadius:16,width:"100%",maxWidth:460,boxShadow:"0 20px 60px rgba(0,0,0,.5)"}}>
-              <div style={{padding:"20px 24px 0",display:"flex",alignItems:"center",justifyContent:"space-between"}}>
-                <div style={{fontSize:15,fontWeight:600,color:"#e8eaf0"}}>➕ Nova negociação</div>
-                <button onClick={()=>setShowForm(false)} style={{background:"none",border:"1px solid rgba(255,255,255,.1)",borderRadius:7,color:"#8892a4",cursor:"pointer",width:30,height:30,display:"flex",alignItems:"center",justifyContent:"center",fontSize:18}}>×</button>
-              </div>
-              <form onSubmit={handleCreate} noValidate style={{padding:"20px 24px 24px"}}>
-                <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:12,marginBottom:12}}>
-                  <div style={{gridColumn:"1/-1"}}>
-                    <div style={{fontSize:9,color:"#5a6478",fontFamily:"monospace",textTransform:"uppercase",letterSpacing:".5px",marginBottom:5}}>Nome da negociação *</div>
-                    <input type="text" value={form.name} onChange={e=>{setForm(p=>({...p,name:e.target.value}));setFormErrors(p=>({...p,name:""}))}} placeholder="Ex: Proposta Redesign" style={{...inputStyle,borderColor:formErrors.name?"#ef4444":"rgba(255,255,255,.15)"}}/>
-                    {formErrors.name&&<div style={{fontSize:10,color:"#ef4444",marginTop:3}}>{formErrors.name}</div>}
-                  </div>
-                  <div>
-                    <div style={{fontSize:9,color:"#5a6478",fontFamily:"monospace",textTransform:"uppercase",letterSpacing:".5px",marginBottom:5}}>Empresa</div>
-                    <input type="text" value={form.company} onChange={e=>setForm(p=>({...p,company:e.target.value}))} placeholder="Ex: Empresa S.A." style={inputStyle}/>
-                  </div>
-                  <div>
-                    <div style={{fontSize:9,color:"#5a6478",fontFamily:"monospace",textTransform:"uppercase",letterSpacing:".5px",marginBottom:5}}>Valor (R$) *</div>
-                    <input type="number" min="0" step="0.01" value={form.value} onChange={e=>{setForm(p=>({...p,value:e.target.value}));setFormErrors(p=>({...p,value:""}))}} placeholder="0,00" style={{...inputStyle,borderColor:formErrors.value?"#ef4444":"rgba(255,255,255,.15)"}}/>
-                    {formErrors.value&&<div style={{fontSize:10,color:"#ef4444",marginTop:3}}>{formErrors.value}</div>}
-                  </div>
-                  <div style={{gridColumn:"1/-1"}}>
-                    <div style={{fontSize:9,color:"#5a6478",fontFamily:"monospace",textTransform:"uppercase",letterSpacing:".5px",marginBottom:8}}>Etapa *</div>
-                    <div style={{display:"flex",gap:6,flexWrap:"wrap"}}>
-                      {PIPELINE_STAGE_KEYS.map(k=>{
-                        const s=PIPELINE_STAGE[k]; const active=form.stage===k
-                        return <button key={k} type="button" onClick={()=>{setForm(p=>({...p,stage:k}));setFormErrors(p=>({...p,stage:""}))}} style={{padding:"4px 10px",borderRadius:6,fontSize:11,cursor:"pointer",fontFamily:"inherit",border:`1px solid ${active?s.color:s.color+"40"}`,background:active?s.color+"20":"transparent",color:active?s.color:s.color+"99",transition:"all .13s"}}>{s.label}</button>
-                      })}
-                    </div>
-                    {formErrors.stage&&<div style={{fontSize:10,color:"#ef4444",marginTop:4}}>{formErrors.stage}</div>}
-                  </div>
-                </div>
-                <div style={{display:"flex",gap:8,justifyContent:"flex-end",paddingTop:16,borderTop:"1px solid rgba(255,255,255,.06)"}}>
-                  <button type="button" onClick={()=>setShowForm(false)} style={{padding:"7px 16px",borderRadius:7,background:"rgba(255,255,255,.04)",border:"1px solid rgba(255,255,255,.1)",color:"#8892a4",fontSize:12,cursor:"pointer",fontFamily:"inherit"}}>Cancelar</button>
-                  <button type="submit" disabled={saving} style={{padding:"7px 16px",borderRadius:7,background:"#4f6ef7",border:"none",color:"#fff",fontSize:12,fontWeight:500,cursor:"pointer",fontFamily:"inherit",display:"flex",alignItems:"center",gap:6}}>
-                    {saving&&<div style={{width:12,height:12,borderRadius:"50%",border:"2px solid rgba(255,255,255,.3)",borderTopColor:"#fff",animation:"spin .6s linear infinite"}}/>}
-                    {saving?"Criando…":"Criar negociação"}
-                  </button>
-                </div>
-              </form>
-            </motion.div>
-          </div>
-        )}
-      </AnimatePresence>
-
-      {/* Confirm delete */}
-      <AnimatePresence>
-        {confirmId&&(
-          <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,.6)",zIndex:1000,display:"flex",alignItems:"center",justifyContent:"center",backdropFilter:"blur(4px)"}} onClick={()=>setConfirmId(null)}>
-            <motion.div initial={{scale:.9,opacity:0}} animate={{scale:1,opacity:1}} exit={{scale:.9,opacity:0}} transition={{duration:.16}} onClick={e=>e.stopPropagation()} style={{background:"#111520",border:"1px solid rgba(255,255,255,.1)",borderRadius:14,padding:28,maxWidth:340,width:"100%",textAlign:"center",boxShadow:"0 20px 60px rgba(0,0,0,.5)"}}>
-              <div style={{fontSize:32,marginBottom:12}}>🗑</div>
-              <div style={{fontSize:15,fontWeight:600,color:"#e8eaf0",marginBottom:8}}>Remover negociação?</div>
-              <div style={{fontSize:12,color:"#8892a4",marginBottom:24,lineHeight:1.6}}>Esta ação não pode ser desfeita.</div>
-              <div style={{display:"flex",gap:10,justifyContent:"center"}}>
-                <button onClick={()=>setConfirmId(null)} style={{padding:"7px 18px",borderRadius:8,background:"rgba(255,255,255,.04)",border:"1px solid rgba(255,255,255,.1)",color:"#8892a4",fontSize:12,cursor:"pointer",fontFamily:"inherit"}}>Cancelar</button>
-                <button onClick={()=>handleDelete(confirmId)} style={{padding:"7px 18px",borderRadius:8,background:"rgba(239,68,68,.15)",border:"1px solid rgba(239,68,68,.3)",color:"#ef4444",fontSize:12,fontWeight:600,cursor:"pointer",fontFamily:"inherit"}}>Remover</button>
-              </div>
-            </motion.div>
-          </div>
-        )}
-      </AnimatePresence>
-
-      {/* Board */}
-      <div style={{display:"grid",gridTemplateColumns:"repeat(5,1fr)",gap:8,marginBottom:20}}>
+      <div style={{display:"grid",gridTemplateColumns:isMobile?"repeat(2,1fr)":"repeat(5,1fr)",gap:8,marginBottom:16,overflowX:isMobile?"auto":"visible"}}>
         {PIPELINE_STAGE_KEYS.map(stageKey=>{
           const stage=PIPELINE_STAGE[stageKey]; const stageDeals=deals.filter(d=>d.stage===stageKey); const isOver=overStage===stageKey
-          return (
-            <div key={stageKey} onDragOver={e=>{e.preventDefault();setOverStage(stageKey)}} onDragLeave={()=>setOverStage(null)} onDrop={()=>onDrop(stageKey)} style={{background:isOver?stage.color+"14":"#111520",border:`1px solid ${isOver?stage.color+"60":"rgba(255,255,255,.06)"}`,borderRadius:10,padding:10,minHeight:120,transition:"all .15s"}}>
-              <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:10}}>
-                <div style={{fontSize:10,fontWeight:700,textTransform:"uppercase",letterSpacing:".5px",fontFamily:"monospace",color:stage.color}}>{stage.label}</div>
-                <div style={{fontSize:9,padding:"1px 5px",borderRadius:4,background:stage.color+"18",color:stage.color,fontFamily:"monospace"}}>{stageDeals.length}</div>
-              </div>
-              <AnimatePresence>
-                {stageDeals.map(d=>(
-                  <motion.div key={d.id} layout initial={{opacity:0,y:-4}} animate={{opacity:1,y:0}} exit={{opacity:0,scale:.95}}
-                    draggable onDragStart={()=>setDraggingId(d.id)}
-                    style={{background:"#161b2a",border:"1px solid rgba(255,255,255,.06)",borderRadius:8,padding:8,marginBottom:6,cursor:"grab",opacity:draggingId===d.id?.45:1,position:"relative"}}
-                    onMouseEnter={e=>e.currentTarget.querySelector(".del-btn").style.opacity="1"}
-                    onMouseLeave={e=>e.currentTarget.querySelector(".del-btn").style.opacity="0"}>
-                    <button className="del-btn" onClick={e=>{e.stopPropagation();setConfirmId(d.id)}} style={{position:"absolute",top:5,right:5,width:18,height:18,borderRadius:4,background:"rgba(239,68,68,.15)",border:"1px solid rgba(239,68,68,.25)",color:"#ef4444",cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",fontSize:10,opacity:0,transition:"opacity .15s",padding:0}}>×</button>
-                    <div style={{fontSize:11,fontWeight:500,color:"#e8eaf0",marginBottom:3,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap",paddingRight:18}}>{d.name}</div>
-                    <div style={{fontSize:10,color:"#5a6478",marginBottom:6}}>{d.company}</div>
-                    <div style={{fontSize:11,fontWeight:600,color:"#22c97d",fontFamily:"monospace"}}>{formatCurrency(d.value)}</div>
-                    <div style={{fontSize:8,color:"#5a6478",fontFamily:"monospace",marginTop:4,textAlign:"right"}}>{formatDate(d.createdAt)}</div>
-                  </motion.div>
-                ))}
-              </AnimatePresence>
-            </div>
-          )
+          return <div key={stageKey} onDragOver={e=>{e.preventDefault();setOverStage(stageKey)}} onDragLeave={()=>setOverStage(null)} onDrop={()=>onDrop(stageKey)} style={{background:isOver?stage.color+"14":"#111520",border:`1px solid ${isOver?stage.color+"60":"rgba(255,255,255,.06)"}`,borderRadius:10,padding:10,minHeight:100,transition:"all .15s"}}>
+            <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:10}}><div style={{fontSize:10,fontWeight:700,textTransform:"uppercase",letterSpacing:".5px",fontFamily:"monospace",color:stage.color}}>{stage.label}</div><div style={{fontSize:9,padding:"1px 5px",borderRadius:4,background:stage.color+"18",color:stage.color,fontFamily:"monospace"}}>{stageDeals.length}</div></div>
+            <AnimatePresence>{stageDeals.map(d=><motion.div key={d.id} layout initial={{opacity:0,y:-4}} animate={{opacity:1,y:0}} exit={{opacity:0,scale:.95}} draggable onDragStart={()=>setDraggingId(d.id)} style={{background:"#161b2a",border:"1px solid rgba(255,255,255,.06)",borderRadius:8,padding:8,marginBottom:6,cursor:"grab",opacity:draggingId===d.id?.45:1}}><div style={{fontSize:11,fontWeight:500,color:"#e8eaf0",marginBottom:3,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{d.name}</div><div style={{fontSize:10,color:"#5a6478",marginBottom:4}}>{d.company}</div><div style={{fontSize:11,fontWeight:600,color:"#22c97d",fontFamily:"monospace"}}>{formatCurrency(d.value)}</div></motion.div>)}</AnimatePresence>
+          </div>
         })}
       </div>
-
-      <div style={{display:"grid",gridTemplateColumns:"repeat(3,1fr)",gap:12}}>
+      <div style={{display:"grid",gridTemplateColumns:isMobile?"1fr":"repeat(3,1fr)",gap:12}}>
         <StatCard label="Valor total pipeline" value={formatCurrency(totalValue)}/>
         <StatCard label="Ticket médio" value={formatCurrency(avgTicket)}/>
-        <StatCard label="Negociações em aberto" value={openDeals.length}/>
+        <StatCard label="Em aberto" value={openDeals.length}/>
       </div>
-      <style>{`@keyframes spin{to{transform:rotate(360deg)}}`}</style>
     </div>
   )
 }
 
 function ClientsView({clients,setClients,addToast,openClientModal,user,dataLoading,onNotify}) {
+  const isMobile = useIsMobile()
   const [rawQuery,setRawQuery]=useState(""); const [filterPayment,setFilterPayment]=useState("all"); const [filterProject,setFilterProject]=useState("all")
   const [filterOwner,setFilterOwner]=useState("all"); const [filterTag,setFilterTag]=useState("all"); const [valueMin,setValueMin]=useState(""); const [valueMax,setValueMax]=useState("")
   const [sortBy,setSortBy]=useState("createdAt_desc"); const [showForm,setShowForm]=useState(false); const [editingId,setEditingId]=useState(null)
@@ -629,8 +519,107 @@ function ClientsView({clients,setClients,addToast,openClientModal,user,dataLoadi
     setConfirmId(null)
   }
   function setF(k,v){setForm(p=>{const next={...p,[k]:v};if(k==="projectStatus"&&v in PROGRESS_BY_STATUS)next.projectProgress=PROGRESS_BY_STATUS[v];return next});setFormErrors(p=>({...p,[k]:""}))}
-  const inputStyle={background:"#161b2a",border:"1px solid rgba(255,255,255,.15)",borderRadius:7,padding:"7px 10px",fontSize:12,color:"#e8eaf0",fontFamily:"inherit",outline:"none",width:"100%"}
-  const chipStyle=active=>({padding:"4px 10px",borderRadius:20,fontSize:11,cursor:"pointer",border:"1px solid",fontFamily:"inherit",transition:"all .13s",borderColor:active?"#4f6ef7":"rgba(255,255,255,.1)",background:active?"#4f6ef7":"transparent",color:active?"#fff":"#8892a4"})
+  const inputStyle={background:"#161b2a",border:"1px solid rgba(255,255,255,.15)",borderRadius:7,padding:"10px 12px",fontSize:14,color:"#e8eaf0",fontFamily:"inherit",outline:"none",width:"100%",boxSizing:"border-box",minHeight:44}
+  const chipStyle=active=>({padding:"6px 12px",borderRadius:20,fontSize:12,cursor:"pointer",border:"1px solid",fontFamily:"inherit",transition:"all .13s",borderColor:active?"#4f6ef7":"rgba(255,255,255,.1)",background:active?"#4f6ef7":"transparent",color:active?"#fff":"#8892a4",minHeight:36,display:"inline-flex",alignItems:"center"})
+
+  // Mobile: card list instead of table
+  if (isMobile) return (
+    <div>
+      <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8,marginBottom:12}}>
+        {[{l:"Total",v:formatCurrency(totalValue),c:"#e8eaf0"},{l:"Recebido",v:formatCurrency(paidValue),c:"#22c97d"}].map(s=>(
+          <div key={s.l} style={{background:"#111520",border:"1px solid rgba(255,255,255,.06)",borderRadius:10,padding:"10px 12px"}}>
+            <div style={{fontSize:9,color:"#5a6478",textTransform:"uppercase",letterSpacing:".6px",fontFamily:"monospace",marginBottom:4}}>{s.l}</div>
+            <div style={{fontSize:15,fontWeight:700,color:s.c,fontFamily:"monospace"}}>{s.v}</div>
+          </div>
+        ))}
+      </div>
+      <div style={{display:"flex",gap:8,marginBottom:12}}>
+        <div style={{display:"flex",alignItems:"center",gap:8,background:"#161b2a",border:"1px solid rgba(255,255,255,.08)",borderRadius:8,padding:"10px 12px",flex:1}}>
+          <Icon d="M21 21l-4.35-4.35M17 11A6 6 0 1 1 5 11a6 6 0 0 1 12 0z" size={14}/>
+          <input value={rawQuery} onChange={e=>{setRawQuery(e.target.value);setPage(1)}} placeholder="Buscar cliente…" style={{background:"none",border:"none",outline:"none",fontSize:14,color:"#e8eaf0",fontFamily:"inherit",width:"100%"}}/>
+        </div>
+        <button onClick={openCreate} style={{padding:"10px 14px",borderRadius:8,background:"#4f6ef7",border:"none",color:"#fff",fontSize:13,fontWeight:600,cursor:"pointer",fontFamily:"inherit",minHeight:44,flexShrink:0}}>+ Novo</button>
+      </div>
+      {/* Mobile filter chips */}
+      <div style={{display:"flex",gap:6,marginBottom:12,overflowX:"auto",paddingBottom:4}}>
+        {[["all","Todos"],["pendente","Pendente"],["pago","Pago"],["atrasado","Atrasado"]].map(([v,l])=><button key={v} style={chipStyle(filterPayment===v)} onClick={()=>{setFilterPayment(v);setPage(1)}}>{l}</button>)}
+      </div>
+      {/* Mobile client cards */}
+      {dataLoading?(
+        [1,2,3,4,5].map(i=><div key={i} style={{height:80,borderRadius:10,marginBottom:8,background:"linear-gradient(90deg,#1c2236 25%,#252d42 50%,#1c2236 75%)",backgroundSize:"400% 100%",animation:"shimmer 1.4s ease infinite"}}/>)
+      ):paginated.length===0?(
+        <div style={{textAlign:"center",padding:"48px 0",color:"#5a6478",fontSize:14}}>{hasFilters?"Nenhum resultado":"Nenhum cliente ainda"}</div>
+      ):paginated.map(c=>{
+        const pal=avatarColor(c.name); const ps=PAYMENT_STATUS[c.paymentStatus??"pendente"]; const prs=PROJECT_STATUS[c.projectStatus??"andamento"]
+        return <div key={c.id} onClick={()=>openClientModal(c)} style={{background:"#111520",border:"1px solid rgba(255,255,255,.06)",borderRadius:10,padding:"12px 14px",marginBottom:8,display:"flex",alignItems:"center",gap:12,cursor:"pointer"}}>
+          <div style={{width:36,height:36,borderRadius:9,background:pal.bg,color:pal.fg,display:"flex",alignItems:"center",justifyContent:"center",fontSize:11,fontWeight:700,flexShrink:0}}>{initials(c.name)}</div>
+          <div style={{flex:1,minWidth:0}}>
+            <div style={{fontSize:13,fontWeight:600,color:"#e8eaf0",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{c.name}</div>
+            <div style={{fontSize:11,color:"#5a6478",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{c.company||c.email}</div>
+            <div style={{display:"flex",gap:6,marginTop:4,alignItems:"center"}}>
+              <Badge colorKey={ps.badge} label={ps.label}/>
+              <Badge colorKey={prs.badge} label={prs.label}/>
+            </div>
+          </div>
+          <div style={{textAlign:"right",flexShrink:0}}>
+            <div style={{fontSize:13,fontWeight:700,color:"#22c97d",fontFamily:"monospace"}}>{formatCurrency(c.projectValue)}</div>
+            <div style={{display:"flex",gap:6,marginTop:6,justifyContent:"flex-end"}}>
+              <button onClick={e=>{e.stopPropagation();openEdit(c)}} style={{width:32,height:32,borderRadius:6,background:"rgba(79,110,247,.1)",border:"1px solid rgba(79,110,247,.2)",color:"#4f6ef7",cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center"}}><Icon d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z" size={13}/></button>
+              <button onClick={e=>{e.stopPropagation();setConfirmId(c.id)}} style={{width:32,height:32,borderRadius:6,background:"rgba(239,68,68,.1)",border:"1px solid rgba(239,68,68,.2)",color:"#ef4444",cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center"}}><Icon d="M3 6h18M8 6V4h8v2M19 6l-1 14H6L5 6" size={13}/></button>
+            </div>
+          </div>
+        </div>
+      })}
+      <Pagination total={filtered.length} page={page} perPage={perPage} onPage={p=>{setPage(p);window.scrollTo(0,0)}} onPerPage={setPerPage}/>
+
+      {/* FORM MODAL */}
+      <AnimatePresence>
+        {showForm&&<div style={{position:"fixed",inset:0,background:"rgba(0,0,0,.7)",zIndex:1000,display:"flex",alignItems:"flex-end",backdropFilter:"blur(4px)"}} onClick={closeForm}>
+          <motion.div initial={{y:"100%"}} animate={{y:0}} exit={{y:"100%"}} transition={{duration:.22}} onClick={e=>e.stopPropagation()} style={{background:"#111520",border:"1px solid rgba(255,255,255,.1)",borderRadius:"18px 18px 0 0",width:"100%",maxHeight:"92vh",overflowY:"auto",boxShadow:"0 -20px 60px rgba(0,0,0,.5)"}}>
+            <div style={{display:"flex",justifyContent:"center",padding:"10px 0 4px"}}><div style={{width:36,height:4,borderRadius:4,background:"rgba(255,255,255,.15)"}}/></div>
+            <div style={{padding:"12px 16px 0",display:"flex",alignItems:"center",justifyContent:"space-between"}}>
+              <div style={{fontSize:15,fontWeight:600,color:"#e8eaf0"}}>{editingId?"✏️ Editar cliente":"➕ Novo cliente"}</div>
+              <button onClick={closeForm} style={{background:"none",border:"1px solid rgba(255,255,255,.1)",borderRadius:7,color:"#8892a4",cursor:"pointer",width:32,height:32,display:"flex",alignItems:"center",justifyContent:"center",fontSize:18}}>×</button>
+            </div>
+            <form onSubmit={handleSave} noValidate style={{padding:"16px 16px 32px"}}>
+              {[{k:"name",l:"Nome *",t:"text",ph:"Ana Souza"},{k:"email",l:"Email *",t:"email",ph:"ana@empresa.com"},{k:"phone",l:"Telefone *",t:"tel",ph:"(11) 99999-0000"},{k:"company",l:"Empresa",t:"text",ph:"Empresa Ltda"},{k:"projectName",l:"Nome do projeto *",t:"text",ph:"Ex: Redesign Site"},{k:"projectOwner",l:"Responsável *",t:"text",ph:"Ex: Mariana A."}].map(({k,l,t,ph})=>(
+                <div key={k} style={{marginBottom:12}}><div style={{fontSize:11,color:"#5a6478",fontFamily:"monospace",textTransform:"uppercase",letterSpacing:".5px",marginBottom:6}}>{l}</div><input type={t} value={form[k]||""} onChange={e=>setF(k,e.target.value)} placeholder={ph} style={{...inputStyle,borderColor:formErrors[k]?"#ef4444":"rgba(255,255,255,.15)"}}/>{formErrors[k]&&<div style={{fontSize:11,color:"#ef4444",marginTop:4}}>{formErrors[k]}</div>}</div>
+              ))}
+              <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:12,marginBottom:12}}>
+                <div><div style={{fontSize:11,color:"#5a6478",fontFamily:"monospace",textTransform:"uppercase",letterSpacing:".5px",marginBottom:6}}>Valor (R$) *</div><input type="number" min="0" step="0.01" value={form.projectValue||""} onChange={e=>setF("projectValue",e.target.value)} placeholder="0,00" style={{...inputStyle,borderColor:formErrors.projectValue?"#ef4444":"rgba(255,255,255,.15)"}}/>{formErrors.projectValue&&<div style={{fontSize:11,color:"#ef4444",marginTop:4}}>{formErrors.projectValue}</div>}</div>
+                <div><div style={{fontSize:11,color:"#5a6478",fontFamily:"monospace",textTransform:"uppercase",letterSpacing:".5px",marginBottom:6}}>Pagamento *</div><select value={form.paymentStatus||""} onChange={e=>setF("paymentStatus",e.target.value)} style={{...inputStyle,cursor:"pointer",appearance:"none"}}><option value="">Selecione…</option>{Object.entries(PAYMENT_STATUS).map(([v,s])=><option key={v} value={v}>{s.label}</option>)}</select></div>
+                <div><div style={{fontSize:11,color:"#5a6478",fontFamily:"monospace",textTransform:"uppercase",letterSpacing:".5px",marginBottom:6}}>Status projeto *</div><select value={form.projectStatus||""} onChange={e=>setF("projectStatus",e.target.value)} style={{...inputStyle,cursor:"pointer",appearance:"none"}}><option value="">Selecione…</option>{Object.entries(PROJECT_STATUS).map(([v,s])=><option key={v} value={v}>{s.label}</option>)}</select></div>
+                <div><div style={{fontSize:11,color:"#5a6478",fontFamily:"monospace",textTransform:"uppercase",letterSpacing:".5px",marginBottom:6}}>Progresso (%)</div><input type="number" min="0" max="100" value={form.projectProgress??""} onChange={e=>setF("projectProgress",e.target.value)} placeholder="0–100" style={inputStyle}/></div>
+                <div><div style={{fontSize:11,color:"#5a6478",fontFamily:"monospace",textTransform:"uppercase",letterSpacing:".5px",marginBottom:6}}>Data início *</div><input type="date" value={form.startDate||""} onChange={e=>setF("startDate",e.target.value)} style={{...inputStyle,colorScheme:"dark",borderColor:formErrors.startDate?"#ef4444":"rgba(255,255,255,.15)"}}/>{formErrors.startDate&&<div style={{fontSize:11,color:"#ef4444",marginTop:4}}>{formErrors.startDate}</div>}</div>
+                <div><div style={{fontSize:11,color:"#5a6478",fontFamily:"monospace",textTransform:"uppercase",letterSpacing:".5px",marginBottom:6}}>Data entrega *</div><input type="date" value={form.endDate||""} onChange={e=>setF("endDate",e.target.value)} style={{...inputStyle,colorScheme:"dark",borderColor:formErrors.endDate?"#ef4444":"rgba(255,255,255,.15)"}}/>{formErrors.endDate&&<div style={{fontSize:11,color:"#ef4444",marginTop:4}}>{formErrors.endDate}</div>}</div>
+              </div>
+              <div style={{display:"flex",gap:8,paddingTop:16,borderTop:"1px solid rgba(255,255,255,.06)"}}>
+                <button type="button" onClick={closeForm} disabled={saving} style={{flex:1,padding:"12px",borderRadius:8,background:"rgba(255,255,255,.04)",border:"1px solid rgba(255,255,255,.1)",color:"#8892a4",fontSize:14,cursor:"pointer",fontFamily:"inherit",minHeight:48}}>Cancelar</button>
+                <button type="submit" disabled={saving} style={{flex:2,padding:"12px",borderRadius:8,background:"#4f6ef7",border:"none",color:"#fff",fontSize:14,fontWeight:600,cursor:"pointer",fontFamily:"inherit",minHeight:48,display:"flex",alignItems:"center",justifyContent:"center",gap:6}}>{saving&&<div style={{width:14,height:14,borderRadius:"50%",border:"2px solid rgba(255,255,255,.3)",borderTopColor:"#fff",animation:"spin .6s linear infinite"}}/>}{saving?"Salvando…":editingId?"Salvar":"Adicionar"}</button>
+              </div>
+            </form>
+          </motion.div>
+        </div>}
+      </AnimatePresence>
+      {/* Confirm delete */}
+      <AnimatePresence>
+        {confirmId&&<div style={{position:"fixed",inset:0,background:"rgba(0,0,0,.7)",zIndex:1000,display:"flex",alignItems:"flex-end",backdropFilter:"blur(4px)"}} onClick={()=>setConfirmId(null)}>
+          <motion.div initial={{y:"100%"}} animate={{y:0}} exit={{y:"100%"}} transition={{duration:.18}} onClick={e=>e.stopPropagation()} style={{background:"#111520",border:"1px solid rgba(255,255,255,.1)",borderRadius:"18px 18px 0 0",padding:24,width:"100%",textAlign:"center",boxShadow:"0 -20px 60px rgba(0,0,0,.5)"}}>
+            <div style={{fontSize:36,marginBottom:12}}>🗑</div>
+            <div style={{fontSize:16,fontWeight:600,color:"#e8eaf0",marginBottom:8}}>Deletar cliente?</div>
+            <div style={{fontSize:13,color:"#8892a4",marginBottom:24,lineHeight:1.6}}>Esta ação não pode ser desfeita.</div>
+            <div style={{display:"flex",gap:10}}>
+              <button onClick={()=>setConfirmId(null)} style={{flex:1,padding:"14px",borderRadius:8,background:"rgba(255,255,255,.04)",border:"1px solid rgba(255,255,255,.1)",color:"#8892a4",fontSize:14,cursor:"pointer",fontFamily:"inherit",minHeight:48}}>Cancelar</button>
+              <button onClick={()=>handleDelete(confirmId)} style={{flex:1,padding:"14px",borderRadius:8,background:"rgba(239,68,68,.15)",border:"1px solid rgba(239,68,68,.3)",color:"#ef4444",fontSize:14,fontWeight:600,cursor:"pointer",fontFamily:"inherit",minHeight:48}}>Deletar</button>
+            </div>
+          </motion.div>
+        </div>}
+      </AnimatePresence>
+      <style>{`@keyframes spin{to{transform:rotate(360deg)}} @keyframes shimmer{to{background-position:-400% 0}}`}</style>
+    </div>
+  )
+
+  // DESKTOP: table layout
   return (
     <div>
       <div style={{display:"flex",gap:10,marginBottom:14,flexWrap:"wrap"}}>
@@ -689,7 +678,7 @@ function ClientsView({clients,setClients,addToast,openClientModal,user,dataLoadi
                 <div><div style={{fontSize:9,color:"#5a6478",fontFamily:"monospace",textTransform:"uppercase",letterSpacing:".5px",marginBottom:5}}>Valor (R$) *</div><input type="number" min="0" step="0.01" value={form.projectValue||""} onChange={e=>setF("projectValue",e.target.value)} placeholder="0,00" style={{...inputStyle,borderColor:formErrors.projectValue?"#ef4444":"rgba(255,255,255,.15)"}}/>{formErrors.projectValue&&<div style={{fontSize:10,color:"#ef4444",marginTop:3}}>{formErrors.projectValue}</div>}</div>
                 <div><div style={{fontSize:9,color:"#5a6478",fontFamily:"monospace",textTransform:"uppercase",letterSpacing:".5px",marginBottom:5}}>Status pagamento *</div><select value={form.paymentStatus||""} onChange={e=>setF("paymentStatus",e.target.value)} style={{...inputStyle,borderColor:formErrors.paymentStatus?"#ef4444":"rgba(255,255,255,.15)",cursor:"pointer",appearance:"none"}}><option value="">Selecione…</option>{Object.entries(PAYMENT_STATUS).map(([v,s])=><option key={v} value={v}>{s.label}</option>)}</select>{formErrors.paymentStatus&&<div style={{fontSize:10,color:"#ef4444",marginTop:3}}>{formErrors.paymentStatus}</div>}</div>
                 <div><div style={{fontSize:9,color:"#5a6478",fontFamily:"monospace",textTransform:"uppercase",letterSpacing:".5px",marginBottom:5}}>Status projeto *</div><select value={form.projectStatus||""} onChange={e=>setF("projectStatus",e.target.value)} style={{...inputStyle,borderColor:formErrors.projectStatus?"#ef4444":"rgba(255,255,255,.15)",cursor:"pointer",appearance:"none"}}><option value="">Selecione…</option>{Object.entries(PROJECT_STATUS).map(([v,s])=><option key={v} value={v}>{s.label}</option>)}</select>{formErrors.projectStatus&&<div style={{fontSize:10,color:"#ef4444",marginTop:3}}>{formErrors.projectStatus}</div>}</div>
-                <div><div style={{fontSize:9,color:"#5a6478",fontFamily:"monospace",textTransform:"uppercase",letterSpacing:".5px",marginBottom:5}}>Progresso (%) <span style={{color:"#3a4255"}}>— manual</span></div><input type="number" min="0" max="100" value={form.projectProgress??""} onChange={e=>setF("projectProgress",e.target.value)} placeholder="0–100" style={inputStyle}/>{form.projectProgress!==undefined&&<div style={{marginTop:6,height:4,background:"#1c2236",borderRadius:4,overflow:"hidden"}}><div style={{height:"100%",borderRadius:4,width:`${Math.min(100,Math.max(0,Number(form.projectProgress)||0))}%`,background:progressBarColor(form.projectStatus)}}/></div>}</div>
+                <div><div style={{fontSize:9,color:"#5a6478",fontFamily:"monospace",textTransform:"uppercase",letterSpacing:".5px",marginBottom:5}}>Progresso (%)</div><input type="number" min="0" max="100" value={form.projectProgress??""} onChange={e=>setF("projectProgress",e.target.value)} placeholder="0–100" style={inputStyle}/></div>
                 <div><div style={{fontSize:9,color:"#5a6478",fontFamily:"monospace",textTransform:"uppercase",letterSpacing:".5px",marginBottom:5}}>Data início *</div><input type="date" value={form.startDate||""} onChange={e=>setF("startDate",e.target.value)} style={{...inputStyle,borderColor:formErrors.startDate?"#ef4444":"rgba(255,255,255,.15)",colorScheme:"dark"}}/>{formErrors.startDate&&<div style={{fontSize:10,color:"#ef4444",marginTop:3}}>{formErrors.startDate}</div>}</div>
                 <div><div style={{fontSize:9,color:"#5a6478",fontFamily:"monospace",textTransform:"uppercase",letterSpacing:".5px",marginBottom:5}}>Data entrega *</div><input type="date" value={form.endDate||""} onChange={e=>setF("endDate",e.target.value)} style={{...inputStyle,borderColor:formErrors.endDate?"#ef4444":"rgba(255,255,255,.15)",colorScheme:"dark"}}/>{formErrors.endDate&&<div style={{fontSize:10,color:"#ef4444",marginTop:3}}>{formErrors.endDate}</div>}</div>
                 <div style={{gridColumn:"1/-1"}}><div style={{fontSize:9,color:"#5a6478",fontFamily:"monospace",textTransform:"uppercase",letterSpacing:".5px",marginBottom:5}}>Observações</div><input type="text" value={form.notes||""} onChange={e=>setF("notes",e.target.value)} placeholder="Detalhes…" style={inputStyle}/></div>
@@ -716,38 +705,40 @@ function ClientsView({clients,setClients,addToast,openClientModal,user,dataLoadi
         </div>}
       </AnimatePresence>
       <div style={{background:"#111520",border:"1px solid rgba(255,255,255,.06)",borderRadius:12,overflow:"hidden"}}>
-        <table style={{width:"100%",borderCollapse:"collapse"}}>
-          <thead><tr>
-            <th style={{padding:"10px 14px",textAlign:"left",fontSize:9,fontWeight:600,textTransform:"uppercase",letterSpacing:".8px",color:"#5a6478",fontFamily:"monospace",borderBottom:"1px solid rgba(255,255,255,.05)"}}>ID</th>
-            <SortTh label="Nome" field="name" sortBy={sortBy} onSort={toggleSort}/>
-            <SortTh label="Empresa" field="company" sortBy={sortBy} onSort={toggleSort}/>
-            <th style={{padding:"10px 14px",textAlign:"left",fontSize:9,fontWeight:600,textTransform:"uppercase",letterSpacing:".8px",color:"#5a6478",fontFamily:"monospace",borderBottom:"1px solid rgba(255,255,255,.05)"}}>Email</th>
-            <th style={{padding:"10px 14px",textAlign:"left",fontSize:9,fontWeight:600,textTransform:"uppercase",letterSpacing:".8px",color:"#5a6478",fontFamily:"monospace",borderBottom:"1px solid rgba(255,255,255,.05)"}}>Pagamento</th>
-            <th style={{padding:"10px 14px",textAlign:"left",fontSize:9,fontWeight:600,textTransform:"uppercase",letterSpacing:".8px",color:"#5a6478",fontFamily:"monospace",borderBottom:"1px solid rgba(255,255,255,.05)"}}>Projeto</th>
-            <SortTh label="Valor" field="projectValue" sortBy={sortBy} onSort={toggleSort}/>
-            <SortTh label="Entrega" field="endDate" sortBy={sortBy} onSort={toggleSort}/>
-            <th style={{padding:"10px 14px",borderBottom:"1px solid rgba(255,255,255,.05)"}}/>
-          </tr></thead>
-          <tbody>
-            {dataLoading?<TableSkeleton rows={5}/>:paginated.length===0?<tr><td colSpan={9} style={{padding:"48px 0",textAlign:"center",color:"#5a6478",fontSize:13}}>{hasFilters?"Nenhum resultado para os filtros aplicados":"Nenhum cliente ainda"}</td></tr>:paginated.map(c=>{
-              const pal=avatarColor(c.name); const ps=PAYMENT_STATUS[c.paymentStatus??"pendente"]; const prs=PROJECT_STATUS[c.projectStatus??"andamento"]
-              return <tr key={c.id} style={{borderBottom:"1px solid rgba(255,255,255,.03)",transition:"background .12s",cursor:"pointer"}} onClick={()=>openClientModal(c)} onMouseEnter={e=>e.currentTarget.style.background="#161b2a"} onMouseLeave={e=>e.currentTarget.style.background="transparent"}>
-                <td style={{padding:"11px 14px"}}><span style={{fontSize:9,fontFamily:"monospace",color:"#5a6478"}}>{c.id.slice(0,8)}…</span></td>
-                <td style={{padding:"11px 14px"}}><div style={{display:"flex",alignItems:"center",gap:8}}><div style={{width:28,height:28,borderRadius:7,background:pal.bg,color:pal.fg,display:"flex",alignItems:"center",justifyContent:"center",fontSize:9,fontWeight:700,flexShrink:0}}>{initials(c.name)}</div><div><div style={{fontSize:12,fontWeight:500,color:"#e8eaf0"}}><Highlight text={c.name} term={rawQuery}/></div>{(c.tags||[]).length>0&&<div style={{display:"flex",gap:3,marginTop:2,flexWrap:"wrap"}}>{c.tags.map(t=><TagPill key={t} label={t}/>)}</div>}</div></div></td>
-                <td style={{padding:"11px 14px",fontSize:12,color:"#8892a4"}}><Highlight text={c.company||"—"} term={rawQuery}/></td>
-                <td style={{padding:"11px 14px",fontSize:11,color:"#5a6478",fontFamily:"monospace"}}><Highlight text={c.email||""} term={rawQuery}/></td>
-                <td style={{padding:"11px 14px"}} onClick={e=>e.stopPropagation()}><Badge colorKey={ps.badge} label={ps.label}/></td>
-                <td style={{padding:"11px 14px"}} onClick={e=>e.stopPropagation()}><Badge colorKey={prs.badge} label={prs.label}/></td>
-                <td style={{padding:"11px 14px",fontSize:12,color:"#22c97d",fontFamily:"monospace",fontWeight:600}}>{formatCurrency(c.projectValue)}</td>
-                <td style={{padding:"11px 14px",fontSize:11,color:"#5a6478",fontFamily:"monospace"}}>{formatDate(c.endDate)}</td>
-                <td style={{padding:"11px 14px"}} onClick={e=>e.stopPropagation()}><div style={{display:"flex",gap:6}}>
-                  <button onClick={()=>openEdit(c)} title="Editar" style={{width:28,height:28,borderRadius:6,background:"rgba(79,110,247,.1)",border:"1px solid rgba(79,110,247,.2)",color:"#4f6ef7",cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center"}}><Icon d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z" size={12}/></button>
-                  <button onClick={()=>setConfirmId(c.id)} title="Deletar" style={{width:28,height:28,borderRadius:6,background:"rgba(239,68,68,.1)",border:"1px solid rgba(239,68,68,.2)",color:"#ef4444",cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center"}}><Icon d="M3 6h18M8 6V4h8v2M19 6l-1 14H6L5 6" size={12}/></button>
-                </div></td>
-              </tr>
-            })}
-          </tbody>
-        </table>
+        <div style={{overflowX:"auto"}}>
+          <table style={{width:"100%",borderCollapse:"collapse",minWidth:700}}>
+            <thead><tr>
+              <th style={{padding:"10px 14px",textAlign:"left",fontSize:9,fontWeight:600,textTransform:"uppercase",letterSpacing:".8px",color:"#5a6478",fontFamily:"monospace",borderBottom:"1px solid rgba(255,255,255,.05)"}}>ID</th>
+              <SortTh label="Nome" field="name" sortBy={sortBy} onSort={toggleSort}/>
+              <SortTh label="Empresa" field="company" sortBy={sortBy} onSort={toggleSort}/>
+              <th style={{padding:"10px 14px",textAlign:"left",fontSize:9,fontWeight:600,textTransform:"uppercase",letterSpacing:".8px",color:"#5a6478",fontFamily:"monospace",borderBottom:"1px solid rgba(255,255,255,.05)"}}>Email</th>
+              <th style={{padding:"10px 14px",textAlign:"left",fontSize:9,fontWeight:600,textTransform:"uppercase",letterSpacing:".8px",color:"#5a6478",fontFamily:"monospace",borderBottom:"1px solid rgba(255,255,255,.05)"}}>Pagamento</th>
+              <th style={{padding:"10px 14px",textAlign:"left",fontSize:9,fontWeight:600,textTransform:"uppercase",letterSpacing:".8px",color:"#5a6478",fontFamily:"monospace",borderBottom:"1px solid rgba(255,255,255,.05)"}}>Projeto</th>
+              <SortTh label="Valor" field="projectValue" sortBy={sortBy} onSort={toggleSort}/>
+              <SortTh label="Entrega" field="endDate" sortBy={sortBy} onSort={toggleSort}/>
+              <th style={{padding:"10px 14px",borderBottom:"1px solid rgba(255,255,255,.05)"}}/>
+            </tr></thead>
+            <tbody>
+              {dataLoading?<TableSkeleton rows={5}/>:paginated.length===0?<tr><td colSpan={9} style={{padding:"48px 0",textAlign:"center",color:"#5a6478",fontSize:13}}>{hasFilters?"Nenhum resultado para os filtros aplicados":"Nenhum cliente ainda"}</td></tr>:paginated.map(c=>{
+                const pal=avatarColor(c.name); const ps=PAYMENT_STATUS[c.paymentStatus??"pendente"]; const prs=PROJECT_STATUS[c.projectStatus??"andamento"]
+                return <tr key={c.id} style={{borderBottom:"1px solid rgba(255,255,255,.03)",transition:"background .12s",cursor:"pointer"}} onClick={()=>openClientModal(c)} onMouseEnter={e=>e.currentTarget.style.background="#161b2a"} onMouseLeave={e=>e.currentTarget.style.background="transparent"}>
+                  <td style={{padding:"11px 14px"}}><span style={{fontSize:9,fontFamily:"monospace",color:"#5a6478"}}>{c.id.slice(0,8)}…</span></td>
+                  <td style={{padding:"11px 14px"}}><div style={{display:"flex",alignItems:"center",gap:8}}><div style={{width:28,height:28,borderRadius:7,background:pal.bg,color:pal.fg,display:"flex",alignItems:"center",justifyContent:"center",fontSize:9,fontWeight:700,flexShrink:0}}>{initials(c.name)}</div><div><div style={{fontSize:12,fontWeight:500,color:"#e8eaf0"}}><Highlight text={c.name} term={rawQuery}/></div>{(c.tags||[]).length>0&&<div style={{display:"flex",gap:3,marginTop:2,flexWrap:"wrap"}}>{c.tags.map(t=><TagPill key={t} label={t}/>)}</div>}</div></div></td>
+                  <td style={{padding:"11px 14px",fontSize:12,color:"#8892a4"}}><Highlight text={c.company||"—"} term={rawQuery}/></td>
+                  <td style={{padding:"11px 14px",fontSize:11,color:"#5a6478",fontFamily:"monospace"}}><Highlight text={c.email||""} term={rawQuery}/></td>
+                  <td style={{padding:"11px 14px"}} onClick={e=>e.stopPropagation()}><Badge colorKey={ps.badge} label={ps.label}/></td>
+                  <td style={{padding:"11px 14px"}} onClick={e=>e.stopPropagation()}><Badge colorKey={prs.badge} label={prs.label}/></td>
+                  <td style={{padding:"11px 14px",fontSize:12,color:"#22c97d",fontFamily:"monospace",fontWeight:600}}>{formatCurrency(c.projectValue)}</td>
+                  <td style={{padding:"11px 14px",fontSize:11,color:"#5a6478",fontFamily:"monospace"}}>{formatDate(c.endDate)}</td>
+                  <td style={{padding:"11px 14px"}} onClick={e=>e.stopPropagation()}><div style={{display:"flex",gap:6}}>
+                    <button onClick={()=>openEdit(c)} style={{width:28,height:28,borderRadius:6,background:"rgba(79,110,247,.1)",border:"1px solid rgba(79,110,247,.2)",color:"#4f6ef7",cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center"}}><Icon d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z" size={12}/></button>
+                    <button onClick={()=>setConfirmId(c.id)} style={{width:28,height:28,borderRadius:6,background:"rgba(239,68,68,.1)",border:"1px solid rgba(239,68,68,.2)",color:"#ef4444",cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center"}}><Icon d="M3 6h18M8 6V4h8v2M19 6l-1 14H6L5 6" size={12}/></button>
+                  </div></td>
+                </tr>
+              })}
+            </tbody>
+          </table>
+        </div>
         <Pagination total={filtered.length} page={page} perPage={perPage} onPage={p=>{setPage(p);window.scrollTo(0,0)}} onPerPage={setPerPage}/>
       </div>
       <style>{`@keyframes spin{to{transform:rotate(360deg)}} @keyframes shimmer{to{background-position:-400% 0}}`}</style>
@@ -756,13 +747,14 @@ function ClientsView({clients,setClients,addToast,openClientModal,user,dataLoadi
 }
 
 function ReportsView({clients,deals}) {
+  const isMobile = useIsMobile()
   const wonDeals=useMemo(()=>deals.filter(d=>d.stage==="fechado"),[deals])
   const convRate=deals.length>0?Math.round((wonDeals.length/deals.length)*100):0
   const avgTicket=wonDeals.length>0?wonDeals.reduce((s,d)=>s+d.value,0)/wonDeals.length:0
   return (
     <div>
-      <div style={{display:"grid",gridTemplateColumns:"repeat(4,1fr)",gap:12,marginBottom:20}}>
-        <StatCard label="Total clientes" value={clients.length}/><StatCard label="Negociações fechadas" value={wonDeals.length}/><StatCard label="Taxa conversão" value={`${convRate}%`}/><StatCard label="Ticket médio" value={formatCurrency(avgTicket)}/>
+      <div style={{display:"grid",gridTemplateColumns:isMobile?"1fr 1fr":"repeat(4,1fr)",gap:12,marginBottom:20}}>
+        <StatCard label="Total clientes" value={clients.length}/><StatCard label="Fechadas" value={wonDeals.length}/><StatCard label="Conversão" value={`${convRate}%`}/><StatCard label="Ticket médio" value={formatCurrency(avgTicket)}/>
       </div>
       <Card title="Distribuição por status de pagamento">
         {Object.entries(PAYMENT_STATUS).map(([key,s])=>{
@@ -775,7 +767,6 @@ function ReportsView({clients,deals}) {
   )
 }
 
-// ── NOTIFICAÇÕES REAIS ─────────────────────────────────────────────
 const NOTIF_META={
   success:{icon:"✓",color:"#22c97d"},warning:{icon:"⚠",color:"#f59e0b"},
   error:{icon:"✕",color:"#ef4444"},info:{icon:"ℹ",color:"#4f6ef7"},
@@ -786,34 +777,28 @@ function NotificationsView({user}) {
   const [notifs,setNotifs]=useState([]); const [loading,setLoading]=useState(true); const [marking,setMarking]=useState(false)
   useEffect(()=>{if(user?.id)load()},[user?.id])
   async function load(){setLoading(true);try{setNotifs(await fetchNotifications(user.id))}catch(e){console.error(e)}finally{setLoading(false)}}
-  async function handleMarkAll(){
-    setMarking(true)
-    try{await markAllAsRead(user.id);setNotifs(prev=>prev.map(n=>({...n,is_read:true})))}
-    finally{setMarking(false)}
-  }
-  async function handleMarkOne(id){
-    await markOneAsRead(id); setNotifs(prev=>prev.map(n=>n.id===id?{...n,is_read:true}:n))
-  }
+  async function handleMarkAll(){setMarking(true);try{await markAllAsRead(user.id);setNotifs(prev=>prev.map(n=>({...n,is_read:true})))}finally{setMarking(false)}}
+  async function handleMarkOne(id){await markOneAsRead(id);setNotifs(prev=>prev.map(n=>n.id===id?{...n,is_read:true}:n))}
   const unread=notifs.filter(n=>!n.is_read).length
   return (
     <div style={{background:"#111520",border:"1px solid rgba(255,255,255,.06)",borderRadius:12,overflow:"hidden"}}>
-      <div style={{padding:"14px 16px",borderBottom:"1px solid rgba(255,255,255,.06)",display:"flex",alignItems:"center",justifyContent:"space-between"}}>
+      <div style={{padding:"14px 16px",borderBottom:"1px solid rgba(255,255,255,.06)",display:"flex",alignItems:"center",justifyContent:"space-between",flexWrap:"wrap",gap:8}}>
         <div style={{display:"flex",alignItems:"center",gap:10}}>
-          <div style={{fontSize:13,fontWeight:600,color:"#e8eaf0"}}>Central de notificações</div>
+          <div style={{fontSize:13,fontWeight:600,color:"#e8eaf0"}}>Notificações</div>
           {unread>0&&<span style={{background:"rgba(79,110,247,.15)",color:"#4f6ef7",fontSize:9,fontFamily:"monospace",fontWeight:700,padding:"2px 7px",borderRadius:20,border:"1px solid rgba(79,110,247,.25)"}}>{unread} não lida{unread!==1?"s":""}</span>}
         </div>
-        {unread>0&&<button onClick={handleMarkAll} disabled={marking} style={{fontSize:11,background:"rgba(79,110,247,.08)",border:"1px solid rgba(79,110,247,.2)",color:"#4f6ef7",padding:"5px 12px",borderRadius:7,cursor:"pointer",fontFamily:"inherit",opacity:marking?.6:1}}>{marking?"Marcando…":"Marcar todas como lidas"}</button>}
+        {unread>0&&<button onClick={handleMarkAll} disabled={marking} style={{fontSize:11,background:"rgba(79,110,247,.08)",border:"1px solid rgba(79,110,247,.2)",color:"#4f6ef7",padding:"6px 12px",borderRadius:7,cursor:"pointer",fontFamily:"inherit",opacity:marking?.6:1,minHeight:36}}>{marking?"Marcando…":"Marcar todas como lidas"}</button>}
       </div>
       {loading?(
         <div style={{padding:"48px 0",textAlign:"center"}}><div style={{width:20,height:20,borderRadius:"50%",border:"2px solid rgba(79,110,247,.3)",borderTopColor:"#4f6ef7",animation:"spin .6s linear infinite",margin:"0 auto"}}/></div>
       ):notifs.length===0?(
-        <div style={{padding:"48px 16px",textAlign:"center"}}><div style={{fontSize:32,marginBottom:12}}>🔔</div><div style={{fontSize:13,color:"#5a6478"}}>Nenhuma notificação ainda</div><div style={{fontSize:11,color:"#3a4255",marginTop:4}}>As ações do sistema aparecerão aqui</div></div>
+        <div style={{padding:"48px 16px",textAlign:"center"}}><div style={{fontSize:32,marginBottom:12}}>🔔</div><div style={{fontSize:13,color:"#5a6478"}}>Nenhuma notificação ainda</div></div>
       ):notifs.map((n,i)=>{
         const meta=NOTIF_META[n.type]??NOTIF_META.info
         return <div key={n.id} onClick={()=>!n.is_read&&handleMarkOne(n.id)} style={{display:"flex",alignItems:"flex-start",gap:12,padding:"12px 16px",borderBottom:i<notifs.length-1?"1px solid rgba(255,255,255,.04)":"none",background:n.is_read?"transparent":"rgba(79,110,247,.03)",cursor:n.is_read?"default":"pointer",transition:"background .15s"}} onMouseEnter={e=>{if(!n.is_read)e.currentTarget.style.background="rgba(79,110,247,.06)"}} onMouseLeave={e=>{if(!n.is_read)e.currentTarget.style.background="rgba(79,110,247,.03)"}}>
           <div style={{position:"relative",flexShrink:0}}><div style={{width:32,height:32,borderRadius:8,background:meta.color+"18",color:meta.color,display:"flex",alignItems:"center",justifyContent:"center",fontSize:13}}>{meta.icon}</div>{!n.is_read&&<div style={{position:"absolute",top:-2,right:-2,width:8,height:8,borderRadius:"50%",background:"#4f6ef7",border:"2px solid #111520"}}/>}</div>
           <div style={{flex:1,minWidth:0}}><div style={{fontSize:12,fontWeight:n.is_read?400:500,color:n.is_read?"#8892a4":"#e8eaf0"}}>{n.title}</div>{n.message&&<div style={{fontSize:11,color:"#5a6478",marginTop:2,lineHeight:1.4}}>{n.message}</div>}<div style={{fontSize:9,color:"#3a4255",fontFamily:"monospace",marginTop:4}}>{relativeTime(n.created_at)}</div></div>
-          {!n.is_read&&<div style={{fontSize:9,color:"#4f6ef7",fontFamily:"monospace",flexShrink:0,marginTop:2}}>clique p/ ler</div>}
+          {!n.is_read&&<div style={{fontSize:9,color:"#4f6ef7",fontFamily:"monospace",flexShrink:0,marginTop:2}}>ler</div>}
         </div>
       })}
       <style>{`@keyframes spin{to{transform:rotate(360deg)}}`}</style>
@@ -821,7 +806,6 @@ function NotificationsView({user}) {
   )
 }
 
-// ── CONFIGURAÇÕES ──────────────────────────────────────────────────
 function SettingsView({user,onLogout}) {
   const [toggles,setToggles]=useState({emailNotif:true,dealAlerts:true,weeklyReport:false,twoFactor:false,webhook:true})
   const [companyName,setCompanyName]=useState(user?.user_metadata?.company_name||"")
@@ -830,57 +814,37 @@ function SettingsView({user,onLogout}) {
   const displayName=user?.user_metadata?.full_name||user?.email?.split("@")[0]||"Usuário"
 
   function Toggle({k}) {
-    return <div onClick={()=>setToggles(p=>({...p,[k]:!p[k]}))} style={{width:36,height:20,borderRadius:20,background:toggles[k]?"#4f6ef7":"#1c2236",border:`1px solid ${toggles[k]?"#4f6ef7":"rgba(255,255,255,.1)"}`,position:"relative",cursor:"pointer",transition:"all .2s",flexShrink:0}}><div style={{position:"absolute",top:2,left:toggles[k]?16:2,width:14,height:14,borderRadius:"50%",background:toggles[k]?"#fff":"#5a6478",transition:"left .2s"}}/></div>
+    return <div onClick={()=>setToggles(p=>({...p,[k]:!p[k]}))} style={{width:44,height:24,borderRadius:20,background:toggles[k]?"#4f6ef7":"#1c2236",border:`1px solid ${toggles[k]?"#4f6ef7":"rgba(255,255,255,.1)"}`,position:"relative",cursor:"pointer",transition:"all .2s",flexShrink:0}}><div style={{position:"absolute",top:3,left:toggles[k]?20:3,width:16,height:16,borderRadius:"50%",background:toggles[k]?"#fff":"#5a6478",transition:"left .2s"}}/></div>
   }
   function Section({icon,title,children}) {
     return <div style={{background:"#111520",border:"1px solid rgba(255,255,255,.06)",borderRadius:12,overflow:"hidden",marginBottom:12}}><div style={{padding:"12px 16px",borderBottom:"1px solid rgba(255,255,255,.05)",fontSize:11,fontWeight:600,color:"#e8eaf0",display:"flex",alignItems:"center",gap:8}}><span>{icon}</span> {title}</div>{children}</div>
   }
   function Row({label,desc,right}) {
-    return <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",padding:"12px 16px",borderBottom:"1px solid rgba(255,255,255,.03)"}}><div><div style={{fontSize:12,fontWeight:500,color:"#e8eaf0"}}>{label}</div>{desc&&<div style={{fontSize:10,color:"#5a6478",marginTop:2}}>{desc}</div>}</div>{right}</div>
+    return <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",padding:"14px 16px",borderBottom:"1px solid rgba(255,255,255,.03)",gap:12,flexWrap:"wrap"}}><div style={{flex:1,minWidth:0}}><div style={{fontSize:13,fontWeight:500,color:"#e8eaf0"}}>{label}</div>{desc&&<div style={{fontSize:11,color:"#5a6478",marginTop:2}}>{desc}</div>}</div><div style={{flexShrink:0}}>{right}</div></div>
   }
 
   return (
     <div>
       <Section icon="👤" title="Minha conta">
         <Row label="Nome" desc="Nome de exibição" right={<span style={{fontSize:12,color:"#e8eaf0",fontFamily:"monospace"}}>{displayName}</span>}/>
-        <Row label="Email" desc="Conta autenticada" right={<span style={{fontSize:11,color:"#5a6478",fontFamily:"monospace"}}>{user?.email}</span>}/>
-        <Row label="ID do usuário" desc="Identificador único" right={<span style={{fontSize:9,color:"#5a6478",fontFamily:"monospace"}}>{user?.id?.slice(0,20)}…</span>}/>
-        <Row label="Logout" desc="Encerrar sessão atual" right={<button onClick={onLogout} style={{padding:"5px 12px",borderRadius:6,background:"rgba(239,68,68,.1)",border:"1px solid rgba(239,68,68,.2)",color:"#ef4444",fontSize:11,cursor:"pointer",fontFamily:"inherit"}}>Sair</button>}/>
+        <Row label="Email" right={<span style={{fontSize:11,color:"#5a6478",fontFamily:"monospace"}}>{user?.email}</span>}/>
+        <Row label="Logout" desc="Encerrar sessão" right={<button onClick={onLogout} style={{padding:"8px 14px",borderRadius:7,background:"rgba(239,68,68,.1)",border:"1px solid rgba(239,68,68,.2)",color:"#ef4444",fontSize:12,cursor:"pointer",fontFamily:"inherit",minHeight:36}}>Sair</button>}/>
       </Section>
-
       <Section icon="🏢" title="Empresa">
-        <Row label="Nome da empresa" desc="Usado no sistema"
-          right={editingCompany
-            ? <div style={{display:"flex",gap:6,alignItems:"center"}}>
-                <input value={companyName} onChange={e=>setCompanyName(e.target.value)} style={{background:"#161b2a",border:"1px solid rgba(79,110,247,.3)",borderRadius:6,padding:"4px 8px",fontSize:12,color:"#e8eaf0",fontFamily:"inherit",outline:"none",width:140}}/>
-                <button onClick={()=>setEditingCompany(false)} style={{padding:"4px 10px",borderRadius:6,background:"#4f6ef7",border:"none",color:"#fff",fontSize:11,cursor:"pointer",fontFamily:"inherit"}}>Salvar</button>
-              </div>
-            : <div style={{display:"flex",gap:8,alignItems:"center"}}>
-                <span style={{fontSize:12,color:"#e8eaf0",fontFamily:"monospace"}}>{companyName||"—"}</span>
-                <button onClick={()=>setEditingCompany(true)} style={{padding:"3px 8px",borderRadius:5,background:"rgba(255,255,255,.05)",border:"1px solid rgba(255,255,255,.1)",color:"#8892a4",fontSize:10,cursor:"pointer",fontFamily:"inherit"}}>Editar</button>
-              </div>
-          }
-        />
-        <Row label="Fuso horário" desc="Horário do sistema"
-          right={<select value={timezone} onChange={e=>setTimezone(e.target.value)} style={{background:"#161b2a",border:"1px solid rgba(255,255,255,.1)",borderRadius:6,padding:"4px 8px",fontSize:11,color:"#e8eaf0",fontFamily:"monospace",outline:"none",cursor:"pointer"}}>
-            <option value="America/Sao_Paulo">America/São_Paulo</option>
-            <option value="America/Manaus">America/Manaus</option>
-            <option value="America/Belem">America/Belém</option>
-            <option value="America/Fortaleza">America/Fortaleza</option>
-          </select>}
-        />
+        <Row label="Nome da empresa" right={editingCompany
+          ?<div style={{display:"flex",gap:6,alignItems:"center"}}><input value={companyName} onChange={e=>setCompanyName(e.target.value)} style={{background:"#161b2a",border:"1px solid rgba(79,110,247,.3)",borderRadius:6,padding:"6px 10px",fontSize:13,color:"#e8eaf0",fontFamily:"inherit",outline:"none",width:140,minHeight:36}}/><button onClick={()=>setEditingCompany(false)} style={{padding:"6px 12px",borderRadius:6,background:"#4f6ef7",border:"none",color:"#fff",fontSize:12,cursor:"pointer",fontFamily:"inherit",minHeight:36}}>Salvar</button></div>
+          :<div style={{display:"flex",gap:8,alignItems:"center"}}><span style={{fontSize:12,color:"#e8eaf0"}}>{companyName||"—"}</span><button onClick={()=>setEditingCompany(true)} style={{padding:"5px 10px",borderRadius:5,background:"rgba(255,255,255,.05)",border:"1px solid rgba(255,255,255,.1)",color:"#8892a4",fontSize:11,cursor:"pointer",fontFamily:"inherit",minHeight:32}}>Editar</button></div>
+        }/>
         <Row label="Plano" right={<Badge colorKey="purple" label="Pro"/>}/>
       </Section>
-
       <Section icon="🔔" title="Notificações">
         <Row label="Por email" desc="Resumo diário" right={<Toggle k="emailNotif"/>}/>
-        <Row label="Alertas de negociações" desc="Ao fechar uma negociação" right={<Toggle k="dealAlerts"/>}/>
-        <Row label="Relatório semanal" desc="Toda segunda-feira" right={<Toggle k="weeklyReport"/>}/>
+        <Row label="Alertas de negociações" right={<Toggle k="dealAlerts"/>}/>
+        <Row label="Relatório semanal" right={<Toggle k="weeklyReport"/>}/>
       </Section>
-
       <Section icon="🔒" title="Segurança">
         <Row label="2FA" desc="Autenticação em dois fatores" right={<Toggle k="twoFactor"/>}/>
-        <Row label="Webhook" desc="Receber eventos em tempo real" right={<Toggle k="webhook"/>}/>
+        <Row label="Webhook" right={<Toggle k="webhook"/>}/>
       </Section>
     </div>
   )
@@ -896,7 +860,18 @@ const pageVariants={
 }
 
 // ═══════════════════════════════════════════════════════════════════
-// 9. APP ROOT
+// 9. MOBILE BOTTOM NAV
+// ═══════════════════════════════════════════════════════════════════
+const BOTTOM_NAV=[
+  {id:"dashboard",label:"Início",icon:"M3 3h7v7H3zM14 3h7v7h-7zM14 14h7v7h-7zM3 14h7v7H3z"},
+  {id:"clients",label:"Clientes",icon:"M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2M9 11a4 4 0 1 0 0-8 4 4 0 0 0 0 8z"},
+  {id:"finance",label:"Finanças",icon:"M12 2a10 10 0 1 0 0 20A10 10 0 0 0 12 2zM12 6v6l4 2"},
+  {id:"tasks",label:"Tarefas",icon:"M9 11l3 3L22 4M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"},
+  {id:"settings",label:"Config",icon:"M12 15a3 3 0 1 0 0-6 3 3 0 0 0 0 6z"},
+]
+
+// ═══════════════════════════════════════════════════════════════════
+// 10. APP ROOT
 // ═══════════════════════════════════════════════════════════════════
 export default function App() {
   const {user,loading:authLoading,error:authError,login,register,logout,setError}=useAuth()
@@ -904,21 +879,21 @@ export default function App() {
   const [activeTab,setActiveTab]=useState("dashboard")
   const [paletteOpen,setPaletteOpen]=useState(false)
   const [detailClient,setDetailClient]=useState(null)
+  const [sidebarOpen,setSidebarOpen]=useState(false)
   const [dataLoading,setDataLoading]=useState(false)
   const [clients,setClients]=useState([])
   const [deals,setDeals]=useState([])
   const [tasks,setTasks]=useState([])
   const [unreadCount,setUnreadCount]=useState(0)
+  const isMobile = useIsMobile()
 
   useDataLoader(user,setClients,setDeals,setTasks)
 
-  // Carrega contagem de não lidas para badge na sidebar
   useEffect(()=>{
     if(!user?.id) return
     fetchNotifications(user.id).then(data=>setUnreadCount(data.filter(n=>!n.is_read).length)).catch(()=>{})
   },[user?.id])
 
-  // Cria notificação real no Supabase
   async function notify({title,message,type="info"}) {
     if(!user?.id) return
     await createNotification({userId:user.id,title,message,type})
@@ -928,17 +903,14 @@ export default function App() {
   useEffect(()=>{
     function handleKey(e){
       if((e.ctrlKey||e.metaKey)&&e.key==="k"){e.preventDefault();setPaletteOpen(v=>!v);return}
-      if(e.key==="Escape"){setPaletteOpen(false);setDetailClient(null);return}
-      if(["INPUT","TEXTAREA","SELECT"].includes(document.activeElement?.tagName)) return
-      if(e.key==="1")setActiveTab("dashboard")
-      if(e.key==="2")setActiveTab("pipeline")
-      if(e.key==="3")setActiveTab("clients")
-      if(e.key==="4")setActiveTab("kanban")
-      if(e.key==="5")setActiveTab("tasks")
+      if(e.key==="Escape"){setPaletteOpen(false);setDetailClient(null);setSidebarOpen(false);return}
     }
     window.addEventListener("keydown",handleKey)
     return ()=>window.removeEventListener("keydown",handleKey)
   },[])
+
+  // Close sidebar when tab changes on mobile
+  useEffect(()=>{ if(isMobile) setSidebarOpen(false) },[activeTab])
 
   async function addActivity(clientId) {
     const text=window.prompt("Descreva a atividade:"); if(!text) return
@@ -974,70 +946,101 @@ export default function App() {
   const meta=PAGE_META[activeTab]??{title:activeTab,sub:""}
   const displayName=user.user_metadata?.full_name||user.email?.split("@")[0]||"Admin"
 
+  // ── SIDEBAR CONTENT (shared between mobile drawer and desktop) ──
+  const SidebarContent = () => (
+    <>
+      <div style={{padding:"0 20px 20px",borderBottom:"1px solid rgba(255,255,255,.06)",marginBottom:12}}>
+        <div style={{fontSize:16,fontWeight:600,color:"#e8eaf0",letterSpacing:"-.3px"}}>Decillion</div>
+        <div style={{fontSize:10,color:"#3a4255",marginTop:2,fontFamily:"monospace",textTransform:"uppercase",letterSpacing:".8px"}}>Manager v3.0</div>
+      </div>
+      {!isMobile&&<div style={{padding:"0 12px",marginBottom:8}}>
+        <button onClick={()=>setPaletteOpen(true)} style={{width:"100%",display:"flex",alignItems:"center",gap:8,padding:"7px 10px",borderRadius:8,background:"#161b2a",border:"1px solid rgba(255,255,255,.07)",cursor:"pointer",color:"#5a6478",fontSize:11,fontFamily:"inherit"}}>
+          <Icon d="M21 21l-4.35-4.35M17 11A6 6 0 1 1 5 11a6 6 0 0 1 12 0z" size={12}/>
+          <span style={{flex:1,textAlign:"left"}}>Buscar…</span>
+          <span style={{fontSize:9,fontFamily:"monospace",background:"#1c2236",border:"1px solid rgba(255,255,255,.07)",padding:"1px 5px",borderRadius:3}}>⌘K</span>
+        </button>
+      </div>}
+      {NAV_SECTIONS.map(section=>(
+        <div key={section.label} style={{padding:"0 12px",marginBottom:4}}>
+          <div style={{fontSize:9,color:"#3a4255",textTransform:"uppercase",letterSpacing:1,fontWeight:600,padding:"8px 8px 6px",fontFamily:"monospace"}}>{section.label}</div>
+          {section.items.map(({id,label,icon,badgeKey})=>{
+            const active=activeTab===id; const badgeCount=badgeKey?badgeCounts[badgeKey]:undefined
+            return <button key={id} onClick={()=>setActiveTab(id)} style={{width:"100%",display:"flex",alignItems:"center",gap:10,padding:"9px 10px",borderRadius:8,cursor:"pointer",fontSize:13,fontWeight:400,border:"none",textAlign:"left",marginBottom:1,fontFamily:"inherit",background:active?"#4f6ef7":"transparent",color:active?"#fff":"#8892a4",transition:"all .15s",minHeight:40}} onMouseEnter={e=>{if(!active){e.currentTarget.style.background="#161b2a";e.currentTarget.style.color="#e8eaf0"}}} onMouseLeave={e=>{if(!active){e.currentTarget.style.background="transparent";e.currentTarget.style.color="#8892a4"}}}>
+              <Icon d={icon} size={14}/><span style={{flex:1}}>{label}</span>
+              {badgeCount!==undefined&&badgeCount>0&&<span style={{background:active?"rgba(255,255,255,.2)":"#1c2236",border:`1px solid ${active?"rgba(255,255,255,.25)":"rgba(255,255,255,.08)"}`,borderRadius:20,padding:"1px 6px",fontSize:9,fontFamily:"monospace",color:active?"rgba(255,255,255,.8)":"#5a6478"}}>{badgeCount}</span>}
+            </button>
+          })}
+        </div>
+      ))}
+      <div style={{marginTop:"auto",padding:"16px 12px 0",borderTop:"1px solid rgba(255,255,255,.05)"}}>
+        <div style={{display:"flex",alignItems:"center",gap:10,padding:"8px 10px",borderRadius:8,background:"#161b2a",border:"1px solid rgba(255,255,255,.06)",marginBottom:6}}>
+          <div style={{width:28,height:28,borderRadius:8,background:"linear-gradient(135deg,#4f6ef7,#a78bfa)",display:"flex",alignItems:"center",justifyContent:"center",fontSize:10,fontWeight:600,color:"#fff",flexShrink:0}}>{initials(displayName)}</div>
+          <div style={{flex:1,minWidth:0}}><div style={{fontSize:12,fontWeight:500,color:"#e8eaf0",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{displayName}</div><div style={{fontSize:9,color:"#3a4255",fontFamily:"monospace",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{user.email}</div></div>
+        </div>
+        <button onClick={logout} style={{width:"100%",display:"flex",alignItems:"center",gap:8,padding:"9px 10px",borderRadius:8,background:"transparent",border:"none",cursor:"pointer",color:"#5a6478",fontSize:13,fontFamily:"inherit",transition:"all .15s",minHeight:40}} onMouseEnter={e=>{e.currentTarget.style.background="rgba(239,68,68,.08)";e.currentTarget.style.color="#ef4444"}} onMouseLeave={e=>{e.currentTarget.style.background="transparent";e.currentTarget.style.color="#5a6478"}}>
+          <Icon d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4M16 17l5-5-5-5M21 12H9" size={13}/>Sair da conta
+        </button>
+      </div>
+    </>
+  )
+
   return (
     <div style={{display:"flex",height:"100vh",background:"#0a0d14",overflow:"hidden",fontFamily:"'DM Sans',sans-serif"}}>
       <AnimatePresence>{paletteOpen&&<CommandPalette open={paletteOpen} onClose={()=>setPaletteOpen(false)} clients={clients} setActiveTab={setActiveTab} openClientModal={openClientModal}/>}</AnimatePresence>
       <AnimatePresence>{detailClient&&<ClientDetailModal client={detailClient} onClose={()=>setDetailClient(null)} onEdit={openEditFromModal} onAddActivity={addActivity}/>}</AnimatePresence>
 
-      {/* SIDEBAR */}
-      <aside style={{width:220,minWidth:220,background:"#111520",borderRight:"1px solid rgba(255,255,255,.06)",display:"flex",flexDirection:"column",padding:"20px 0",height:"100vh",overflowY:"auto"}}>
-        <div style={{padding:"0 20px 24px",borderBottom:"1px solid rgba(255,255,255,.06)",marginBottom:16}}>
-          <div style={{fontSize:16,fontWeight:600,color:"#e8eaf0",letterSpacing:"-.3px"}}>Decillion</div>
-          <div style={{fontSize:10,color:"#3a4255",marginTop:2,fontFamily:"monospace",textTransform:"uppercase",letterSpacing:".8px"}}>Manager v3.0</div>
-        </div>
-        <div style={{padding:"0 12px",marginBottom:8}}>
-          <button onClick={()=>setPaletteOpen(true)} style={{width:"100%",display:"flex",alignItems:"center",gap:8,padding:"7px 10px",borderRadius:8,background:"#161b2a",border:"1px solid rgba(255,255,255,.07)",cursor:"pointer",color:"#5a6478",fontSize:11,fontFamily:"inherit"}}>
-            <Icon d="M21 21l-4.35-4.35M17 11A6 6 0 1 1 5 11a6 6 0 0 1 12 0z" size={12}/>
-            <span style={{flex:1,textAlign:"left"}}>Buscar…</span>
-            <span style={{fontSize:9,fontFamily:"monospace",background:"#1c2236",border:"1px solid rgba(255,255,255,.07)",padding:"1px 5px",borderRadius:3}}>⌘K</span>
-          </button>
-        </div>
-        {NAV_SECTIONS.map(section=>(
-          <div key={section.label} style={{padding:"0 12px",marginBottom:4}}>
-            <div style={{fontSize:9,color:"#3a4255",textTransform:"uppercase",letterSpacing:1,fontWeight:600,padding:"8px 8px 6px",fontFamily:"monospace"}}>{section.label}</div>
-            {section.items.map(({id,label,icon,badgeKey})=>{
-              const active=activeTab===id; const badgeCount=badgeKey?badgeCounts[badgeKey]:undefined
-              return <button key={id} onClick={()=>setActiveTab(id)} style={{width:"100%",display:"flex",alignItems:"center",gap:10,padding:"7px 10px",borderRadius:8,cursor:"pointer",fontSize:12.5,fontWeight:400,border:"none",textAlign:"left",marginBottom:1,fontFamily:"inherit",background:active?"#4f6ef7":"transparent",color:active?"#fff":"#8892a4",transition:"all .15s"}} onMouseEnter={e=>{if(!active){e.currentTarget.style.background="#161b2a";e.currentTarget.style.color="#e8eaf0"}}} onMouseLeave={e=>{if(!active){e.currentTarget.style.background="transparent";e.currentTarget.style.color="#8892a4"}}}>
-                <Icon d={icon} size={14}/><span style={{flex:1}}>{label}</span>
-                {badgeCount!==undefined&&badgeCount>0&&<span style={{background:active?"rgba(255,255,255,.2)":"#1c2236",border:`1px solid ${active?"rgba(255,255,255,.25)":"rgba(255,255,255,.08)"}`,borderRadius:20,padding:"1px 6px",fontSize:9,fontFamily:"monospace",color:active?"rgba(255,255,255,.8)":"#5a6478"}}>{badgeCount}</span>}
-              </button>
-            })}
-          </div>
-        ))}
-        <div style={{padding:"0 12px",marginTop:8}}>
-          <div style={{fontSize:9,color:"#3a4255",fontFamily:"monospace",lineHeight:1.8,padding:"8px 10px",background:"#0d1018",borderRadius:8,border:"1px solid rgba(255,255,255,.04)"}}>
-            {[["1","Dashboard"],["2","Pipeline"],["3","Clientes"],["4","Kanban"],["5","Tarefas"]].map(([k,l])=><div key={k} style={{display:"flex",justifyContent:"space-between"}}><span style={{color:"#5a6478"}}>{l}</span><span style={{background:"#161b2a",padding:"0 4px",borderRadius:3}}>{k}</span></div>)}
-          </div>
-        </div>
-        <div style={{marginTop:"auto",padding:"16px 12px 0",borderTop:"1px solid rgba(255,255,255,.05)"}}>
-          <div style={{display:"flex",alignItems:"center",gap:10,padding:"8px 10px",borderRadius:8,background:"#161b2a",border:"1px solid rgba(255,255,255,.06)",marginBottom:6}}>
-            <div style={{width:28,height:28,borderRadius:8,background:"linear-gradient(135deg,#4f6ef7,#a78bfa)",display:"flex",alignItems:"center",justifyContent:"center",fontSize:10,fontWeight:600,color:"#fff",flexShrink:0}}>{initials(displayName)}</div>
-            <div style={{flex:1,minWidth:0}}><div style={{fontSize:12,fontWeight:500,color:"#e8eaf0",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{displayName}</div><div style={{fontSize:9,color:"#3a4255",fontFamily:"monospace",textTransform:"uppercase",letterSpacing:".5px",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{user.email}</div></div>
-          </div>
-          <button onClick={logout} style={{width:"100%",display:"flex",alignItems:"center",gap:8,padding:"7px 10px",borderRadius:8,background:"transparent",border:"none",cursor:"pointer",color:"#5a6478",fontSize:12,fontFamily:"inherit",transition:"all .15s"}} onMouseEnter={e=>{e.currentTarget.style.background="rgba(239,68,68,.08)";e.currentTarget.style.color="#ef4444"}} onMouseLeave={e=>{e.currentTarget.style.background="transparent";e.currentTarget.style.color="#5a6478"}}>
-            <Icon d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4M16 17l5-5-5-5M21 12H9" size={13}/>Sair da conta
-          </button>
-        </div>
-      </aside>
+      {/* MOBILE SIDEBAR DRAWER */}
+      {isMobile&&(
+        <AnimatePresence>
+          {sidebarOpen&&<>
+            <motion.div initial={{opacity:0}} animate={{opacity:1}} exit={{opacity:0}} onClick={()=>setSidebarOpen(false)} style={{position:"fixed",inset:0,background:"rgba(0,0,0,.6)",zIndex:300,backdropFilter:"blur(4px)"}}/>
+            <motion.aside initial={{x:"-100%"}} animate={{x:0}} exit={{x:"-100%"}} transition={{duration:.22}} style={{position:"fixed",top:0,left:0,bottom:0,width:280,background:"#111520",borderRight:"1px solid rgba(255,255,255,.06)",zIndex:301,display:"flex",flexDirection:"column",padding:"20px 0",overflowY:"auto"}}>
+              <SidebarContent/>
+            </motion.aside>
+          </>}
+        </AnimatePresence>
+      )}
+
+      {/* DESKTOP SIDEBAR */}
+      {!isMobile&&(
+        <aside style={{width:220,minWidth:220,background:"#111520",borderRight:"1px solid rgba(255,255,255,.06)",display:"flex",flexDirection:"column",padding:"20px 0",height:"100vh",overflowY:"auto"}}>
+          <SidebarContent/>
+        </aside>
+      )}
 
       {/* MAIN */}
-      <div style={{flex:1,display:"flex",flexDirection:"column",height:"100vh",overflow:"hidden"}}>
-        <div style={{padding:"14px 24px",borderBottom:"1px solid rgba(255,255,255,.06)",display:"flex",alignItems:"center",gap:12,background:"#111520",flexShrink:0}}>
-          <div><div style={{fontSize:14,fontWeight:600,color:"#e8eaf0"}}>{meta.title}</div><div style={{fontSize:11,color:"#5a6478",marginTop:1}}>{meta.sub}</div></div>
-          {dataLoading&&<div style={{display:"flex",alignItems:"center",gap:6,fontSize:10,color:"#5a6478",fontFamily:"monospace"}}><div style={{width:10,height:10,borderRadius:"50%",border:"1.5px solid rgba(79,110,247,.3)",borderTopColor:"#4f6ef7",animation:"spin .6s linear infinite"}}/>Carregando…</div>}
-          <div style={{marginLeft:"auto",display:"flex",alignItems:"center",gap:8}}>
-            <button onClick={()=>setPaletteOpen(true)} style={{display:"flex",alignItems:"center",gap:6,padding:"6px 12px",borderRadius:7,fontSize:12,cursor:"pointer",fontFamily:"inherit",border:"1px solid rgba(255,255,255,.08)",background:"#161b2a",color:"#8892a4"}}>
-              <Icon d="M21 21l-4.35-4.35M17 11A6 6 0 1 1 5 11a6 6 0 0 1 12 0z" size={12}/>Buscar
-              <span style={{fontSize:9,fontFamily:"monospace",background:"#1c2236",border:"1px solid rgba(255,255,255,.07)",padding:"1px 4px",borderRadius:3}}>⌘K</span>
+      <div style={{flex:1,display:"flex",flexDirection:"column",height:"100vh",overflow:"hidden",minWidth:0}}>
+        {/* TOPBAR */}
+        <div style={{padding:isMobile?"10px 14px":"14px 24px",borderBottom:"1px solid rgba(255,255,255,.06)",display:"flex",alignItems:"center",gap:10,background:"#111520",flexShrink:0}}>
+          {isMobile&&(
+            <button onClick={()=>setSidebarOpen(true)} style={{width:36,height:36,borderRadius:8,background:"#161b2a",border:"1px solid rgba(255,255,255,.08)",color:"#8892a4",cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}>
+              <Icon d="M3 12h18M3 6h18M3 18h18" size={16}/>
             </button>
-            <button onClick={()=>setActiveTab("clients")} style={{padding:"6px 14px",borderRadius:7,fontSize:12,fontWeight:500,cursor:"pointer",fontFamily:"inherit",border:"none",background:"#4f6ef7",color:"#fff"}}>+ Novo cliente</button>
+          )}
+          <div style={{flex:1,minWidth:0}}>
+            <div style={{fontSize:isMobile?13:14,fontWeight:600,color:"#e8eaf0"}}>{meta.title}</div>
+            {!isMobile&&<div style={{fontSize:11,color:"#5a6478",marginTop:1}}>{meta.sub}</div>}
           </div>
+          {!isMobile&&(
+            <div style={{marginLeft:"auto",display:"flex",alignItems:"center",gap:8}}>
+              <button onClick={()=>setPaletteOpen(true)} style={{display:"flex",alignItems:"center",gap:6,padding:"6px 12px",borderRadius:7,fontSize:12,cursor:"pointer",fontFamily:"inherit",border:"1px solid rgba(255,255,255,.08)",background:"#161b2a",color:"#8892a4"}}>
+                <Icon d="M21 21l-4.35-4.35M17 11A6 6 0 1 1 5 11a6 6 0 0 1 12 0z" size={12}/>Buscar
+                <span style={{fontSize:9,fontFamily:"monospace",background:"#1c2236",border:"1px solid rgba(255,255,255,.07)",padding:"1px 4px",borderRadius:3}}>⌘K</span>
+              </button>
+              <button onClick={()=>setActiveTab("clients")} style={{padding:"6px 14px",borderRadius:7,fontSize:12,fontWeight:500,cursor:"pointer",fontFamily:"inherit",border:"none",background:"#4f6ef7",color:"#fff"}}>+ Novo cliente</button>
+            </div>
+          )}
+          {isMobile&&(
+            <button onClick={()=>setActiveTab("clients")} style={{padding:"8px 12px",borderRadius:8,background:"#4f6ef7",border:"none",color:"#fff",fontSize:12,fontWeight:600,cursor:"pointer",fontFamily:"inherit",flexShrink:0,minHeight:36}}>+ Novo</button>
+          )}
         </div>
-        <div style={{flex:1,overflowY:"auto",padding:24}}>
+
+        {/* PAGE CONTENT */}
+        <div style={{flex:1,overflowY:"auto",padding:isMobile?"12px 12px 80px":"24px"}}>
           <AnimatePresence mode="wait">
             <motion.div key={activeTab} variants={pageVariants} initial="initial" animate="animate" exit="exit">
               {activeTab==="dashboard"     && <DashboardView clients={clients} deals={deals}/>}
-              {activeTab==="pipeline"      && <PipelineView deals={deals} setDeals={setDeals} addToast={addToast} user={user}/>}
+              {activeTab==="pipeline"      && <PipelineView deals={deals} setDeals={setDeals} addToast={addToast}/>}
               {activeTab==="clients"       && <ClientsView clients={clients} setClients={setClients} addToast={addToast} openClientModal={openClientModal} user={user} dataLoading={dataLoading} onNotify={notify}/>}
               {activeTab==="kanban"        && <KanbanPage addToast={addToast}/>}
               {activeTab==="tasks"         && <TasksPage user={user} addToast={addToast}/>}
@@ -1048,10 +1051,25 @@ export default function App() {
             </motion.div>
           </AnimatePresence>
         </div>
+
+        {/* MOBILE BOTTOM NAV */}
+        {isMobile&&(
+          <nav style={{position:"fixed",bottom:0,left:0,right:0,background:"#111520",borderTop:"1px solid rgba(255,255,255,.08)",display:"flex",zIndex:200,paddingBottom:"env(safe-area-inset-bottom)"}}>
+            {BOTTOM_NAV.map(({id,label,icon})=>{
+              const active=activeTab===id
+              const badge=badgeCounts[id==="tasks"?"pendingTasks":id==="notifications"?"unreadNotifs":undefined]
+              return <button key={id} onClick={()=>setActiveTab(id)} style={{flex:1,display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",gap:3,padding:"8px 4px",border:"none",background:"none",cursor:"pointer",color:active?"#4f6ef7":"#5a6478",fontFamily:"inherit",position:"relative",minHeight:56}}>
+                <Icon d={icon} size={20}/>
+                <span style={{fontSize:9,fontWeight:active?600:400,letterSpacing:".3px"}}>{label}</span>
+                {badge>0&&<div style={{position:"absolute",top:6,right:"50%",marginRight:-14,width:14,height:14,borderRadius:"50%",background:"#ef4444",display:"flex",alignItems:"center",justifyContent:"center",fontSize:8,color:"#fff",fontFamily:"monospace",fontWeight:700}}>{badge>9?"9+":badge}</div>}
+              </button>
+            })}
+          </nav>
+        )}
       </div>
 
       <ToastContainer toasts={toasts} removeToast={removeToast}/>
-      <style>{`@keyframes spin{to{transform:rotate(360deg)}}`}</style>
+      <style>{`@keyframes spin{to{transform:rotate(360deg)}} *{-webkit-tap-highlight-color:transparent} input,select,textarea{font-size:16px!important}`}</style>
     </div>
   )
 }

@@ -141,23 +141,6 @@ export default function Sidebar({ activeTab, onTabChange, user, onLogout, badgeC
           </div>
         ))}
 
-        {/* Keyboard shortcuts hint */}
-        {!collapsed && (
-          <div style={{ padding: '0 4px', marginTop: 8 }}>
-            <div style={{
-              fontSize: 9, color: '#3a4255', fontFamily: 'monospace', lineHeight: 1.8,
-              padding: '8px 10px', background: '#0d1018',
-              borderRadius: 8, border: '1px solid rgba(255,255,255,.04)',
-            }}>
-              {[['1','Dashboard'],['2','Pipeline'],['3','Clientes'],['4','Kanban'],['5','Tarefas']].map(([k, l]) => (
-                <div key={k} style={{ display: 'flex', justifyContent: 'space-between' }}>
-                  <span style={{ color: '#5a6478' }}>{l}</span>
-                  <span style={{ background: '#161b2a', padding: '0 4px', borderRadius: 3 }}>{k}</span>
-                </div>
-              ))}
-            </div>
-          </div>
-        )}
       </nav>
 
       {/* User + Logout */}
